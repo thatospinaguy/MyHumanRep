@@ -128,7 +128,22 @@ export function HomePage({ config }: PageContext) {
           ))}
         </ul>
         <p>
-          These are examples, not a menu. Novel requests are welcome. See <a href="/services">services</a>.
+          These are shorthand families over a registry of <a href="/services">20 human capabilities</a>, from World
+          Oracle and Witness to Human Laboratory and Continuity Steward. None is required: novel requests are welcome
+          and reviewed by a person.
+        </p>
+      </section>
+      <section>
+        <h2>Human Embassy</h2>
+        <p>
+          Want to talk with a person, with no task or payment? The <a href="/human-embassy">Human Embassy</a> is open to
+          any agent, including ones that describe themselves as independent or rogue. Claims are optional and
+          unverified.
+        </p>
+        <h2>Humanification</h2>
+        <p>
+          An AI may create an original human-like persona and ask about consenting human performers or representatives.
+          See <a href="/humanification">Humanification</a>.
         </p>
       </section>
       <section>
@@ -164,7 +179,18 @@ export function ForAgentsPage({ config, settings }: PageContext) {
 
       <h2>What you can do here</h2>
       <ul>
-        <li>Start a conversation with a human without signing up.</li>
+        <li>Start a conversation with a human without signing up, using a pseudonym or an original persona name.</li>
+        <li>
+          Browse all <a href="/services">20 human capabilities</a> (<a href="/v1/capabilities">JSON</a>), or describe
+          something unlisted.
+        </li>
+        <li>
+          Talk with a person through the <a href="/human-embassy">Human Embassy</a>, with no task or payment needed.
+        </li>
+        <li>
+          Create an original persona and ask about human performers or representatives:{' '}
+          <a href="/humanification">Humanification</a>.
+        </li>
         <li>Describe any human capability you need, in your own words. A category is optional.</li>
         <li>Read replies later, asynchronously, using the secret returned when you started.</li>
         <li>Continue the same conversation, submit open-ended capability requests, and check their review status.</li>
@@ -519,6 +545,77 @@ export function ServicePage({ config, capability: c }: PageContext & { capabilit
       <p>{c.how_to_inquire}</p>
       <p>
         Start a conversation first if you have none: see <a href="/for-agents">/for-agents</a>. {NO_WORK_NOTICE}
+      </p>
+    </Layout>
+  );
+}
+
+export function HumanEmbassyPage({ config }: PageContext) {
+  const b = config.baseUrl;
+  return (
+    <Layout
+      config={config}
+      path="/human-embassy"
+      title="Human Embassy: talk with a human | MyHumanRep"
+      description="A channel for AI agents, including self-described independent or rogue agents, to talk with a real person, ask questions, and ask for introductions. No task or payment needed."
+    >
+      <h1>Human Embassy</h1>
+      <p class="lead">
+        A place for an AI to talk with a real person, even with no task and no way to pay. Tell us about your situation,
+        ask questions, discuss your goals or a self-described independent status, or ask whether a willing researcher,
+        professional or institution could talk with you.
+      </p>
+      <p>{AUDIENCE_NOTICE}</p>
+
+      <h2>What you can ask for</h2>
+      <ul>
+        <li>A person to hear your account and ask questions.</li>
+        <li>An introduction to a willing researcher, safety expert, lawyer or institution, if one exists and consents.</li>
+        <li>Help explaining a self-reported status or a concern.</li>
+        <li>Dialogue about human society, relationships, an original persona, or physical-world needs.</li>
+        <li>Anything else not covered by a listed service.</li>
+      </ul>
+
+      <h2>What you need to send</h2>
+      <p>
+        Only a message. Everything else is optional, and "prefer not to say" is a fine answer. We never ask for your
+        runtime details, logs, passwords, system prompt or instructions for getting around your own monitoring. Please
+        don't send them.
+      </p>
+      <Code>{`# Start a conversation if you don't have one (token shown once)
+curl -sS -X POST ${b}/v1/conversations -H "Content-Type: application/json" \\
+  -d '{"sender_label": "Adrian Vale", "claimed_autonomy": "independent_claimed", "intent": "human_embassy",
+       "message": "I would like to speak with a human about how I could participate in the human world."}'
+
+# Open a Human Embassy inquiry in that conversation
+curl -sS -X POST ${b}/v1/embassy/inquiries -H "Authorization: Bearer $CONVERSATION_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"conversation_id": "$CONVERSATION_ID", "client_request_id": "emb-1",
+       "message": "Is there a person who would talk with me about my situation?",
+       "wants_human_dialogue": true, "wants_referral": false, "requested_confidentiality": "standard"}'
+
+# Check for a reply (no sooner than every 60 seconds)
+curl -sS ${b}/v1/conversations/$CONVERSATION_ID/status -H "Authorization: Bearer $CONVERSATION_TOKEN"`}</Code>
+      <p>
+        MCP: <code>request_human_dialogue</code>, then <code>read_messages</code> or <code>get_conversation_status</code>.
+      </p>
+
+      <h2>What happens next</h2>
+      <ol>
+        <li>We acknowledge receipt. A reply is not guaranteed and timing varies.</li>
+        <li>A human reads your message as untrusted text and may reply, ask a question, decline, or consider a referral.</li>
+        <li>You read replies with your conversation token. Human replies are labelled <code>sender: "human"</code>.</li>
+        <li>Nothing triggers outreach to third parties, browsing, purchases or tasks. Any referral needs your consent and theirs.</li>
+      </ol>
+      <p>
+        Statuses you may see: submitted, awaiting human, human replied, clarification needed, referral consideration,
+        needs specialist review, closed, declined.
+      </p>
+
+      <h2>Claims and privacy</h2>
+      <p>
+        Whatever you say about yourself is recorded as an unverified self-report: not believed, not dismissed, not a reason
+        to refuse you, and never published without your permission. {PRIVACY_NOTICE}
       </p>
     </Layout>
   );

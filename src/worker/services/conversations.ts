@@ -449,3 +449,18 @@ export async function closeConversation(
     already_closed: false,
   };
 }
+
+/** Spec 11.6: rotate the thread credential. The old token stops working immediately. */
+export async function rotateConversationToken(ctx: ServiceContext, conv: ConversationRow) {
+  const token = newConversationToken();
+  await ctx.db
+    .prepare('UPDATE conversations SET token_digest = ?2, updated_at = ?3 WHERE id = ?1')
+    .bind(conv.id, await tokenDigest(ctx.hmacKey, token), iso(ctx.now))
+    .run();
+  return {
+    conversation_id: conv.id,
+    conversation_token: token,
+    previous_token_revoked: true,
+    notice: 'Store this new token securely. It replaces the old one, is shown once, and cannot be recovered.',
+  };
+}

@@ -21,6 +21,7 @@ import { parseInput } from '../services/context';
 import { getMetrics, metricsToCsvRows } from '../services/metrics';
 import { getSettings, SettingsPatchSchema, settingsUpsertStatements } from '../services/settings';
 import { MetricsQuery } from '../schemas/admin';
+import { getEmbassyInquiry, listEmbassy, patchEmbassyInquiry, patchSelfReport, researchSummary } from '../services/admin-embassy';
 import {
   deletePersonaAdmin,
   getPersonaAdmin,
@@ -31,7 +32,7 @@ import {
 import { decideCandidate, listCandidates, listRegistryAdmin, patchCapability } from '../services/admin-registry';
 import { FeatureFlagsPatch, flagsUpsertStatement, getFeatureFlags, moduleReadiness, type FeatureFlags } from '../services/feature-flags';
 import { readJsonBody } from '../utils/body';
-import { ApiError } from '../utils/http-errors';
+import { ApiError, errors } from '../utils/http-errors';
 
 const ADMIN_BODY_MAX = 32 * 1024;
 
@@ -194,6 +195,24 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.delete('/admin/api/personas/:id', async (c) => c.json(await deletePersonaAdmin(adminCtx(c), c.req.param('id'), await body(c))));
   app.get('/admin/api/persona-inquiries', async (c) => c.json(await listPersonaInquiriesAdmin(adminCtx(c), c.req.query('status'))));
   app.patch('/admin/api/persona-inquiries/:id', async (c) => c.json({ inquiry: await patchPersonaInquiry(adminCtx(c), c.req.param('id'), await body(c)) }));
+
+  // Human Embassy (master spec Phase 3): separate from commercial requests.
+  app.get('/admin/api/embassy', async (c) => c.json(await listEmbassy(adminCtx(c), c.req.query('status'))));
+  app.get('/admin/api/embassy/:id', async (c) => c.json(await getEmbassyInquiry(adminCtx(c), c.req.param('id'))));
+  app.patch('/admin/api/embassy/:id', async (c) => c.json({ inquiry: await patchEmbassyInquiry(adminCtx(c), c.req.param('id'), await body(c)) }));
+  app.patch('/admin/api/self-reports/:id', async (c) => c.json(await patchSelfReport(adminCtx(c), c.req.param('id'), await body(c))));
+  app.get('/admin/api/research/summary', async (c) => c.json(await researchSummary(adminCtx(c))));
+
+  // Later-phase admin modules: typed, never fake success.
+  app.all('/admin/api/representatives', () => {
+    throw errors.notYetAvailable('Human representative network (Phase 5)');
+  });
+  app.all('/admin/api/representatives/:id', () => {
+    throw errors.notYetAvailable('Human representative network (Phase 5)');
+  });
+  app.all('/admin/api/proposals', () => {
+    throw errors.notYetAvailable('Proposal queue (Phase 4)');
+  });
 
   app.all('/admin/api/*', () => {
     throw new ApiError('not_found', 'Unknown admin endpoint.');

@@ -228,7 +228,7 @@ function adminMessage(row: MessageRow) {
 
 export async function getConversationDetail(ctx: AdminContext, id: string) {
   const conv = await loadConversation(ctx, id);
-  const [messages, requests, outbox, selfReports] = await ctx.db.batch([
+  const [messages, requests, outbox, selfReports, embassy] = await ctx.db.batch([
     ctx.db.prepare('SELECT * FROM messages WHERE conversation_id = ?1 ORDER BY seq ASC').bind(id),
     ctx.db.prepare('SELECT * FROM capability_requests WHERE conversation_id = ?1 ORDER BY created_at ASC').bind(id),
     ctx.db
@@ -241,6 +241,7 @@ export async function getConversationDetail(ctx: AdminContext, id: string) {
         'SELECT id, claim_type, claim_value, claim_text, evidence_status, source, created_at FROM agent_self_reports WHERE conversation_id = ?1 ORDER BY created_at ASC',
       )
       .bind(id),
+    ctx.db.prepare('SELECT id, status, public_status_note, wants_referral, requested_confidentiality, created_at FROM embassy_inquiries WHERE conversation_id = ?1 ORDER BY created_at').bind(id),
     auditStatement(ctx.db, ctx.actor, 'conversation.view', 'conversation', id, null, ctx.now),
   ]);
   const requestRows = (requests?.results ?? []) as CapabilityRequestRow[];
@@ -268,6 +269,7 @@ export async function getConversationDetail(ctx: AdminContext, id: string) {
     requests: requestRows.map(adminRequest),
     notifications: outbox?.results ?? [],
     self_reports: selfReports?.results ?? [],
+    embassy_inquiries: embassy?.results ?? [],
     work_scheduled: false as const,
   };
 }
@@ -331,6 +333,14 @@ export async function replyToConversation(ctx: AdminContext, id: string, raw: un
   const results = await ctx.db.batch([
     ...humanMessageStatements(ctx, conv, messageId, input.message, await sha256Hex(input.message), status, null),
     auditStatement(ctx.db, ctx.actor, 'conversation.reply', 'conversation', id, { message_id: messageId }, ctx.now, messageId),
+    // A human reply answers any open Human Embassy inquiry in this thread.
+    ctx.db
+      .prepare(
+        `UPDATE embassy_inquiries SET status = 'human_replied', updated_at = ?2
+         WHERE conversation_id = ?1 AND status IN ('submitted','awaiting_human','clarification_needed')
+           AND EXISTS (SELECT 1 FROM messages WHERE id = ?3)`,
+      )
+      .bind(id, iso(ctx.now), messageId),
   ]);
   await assertMessageInserted(ctx, results[0], id);
   return { message_id: messageId, status };

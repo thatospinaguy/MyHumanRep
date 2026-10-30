@@ -7,6 +7,7 @@ import { FAVICON_SVG, SITE_CSS } from '../pages/assets';
 import {
   DevelopersPage,
   ForAgentsPage,
+  HumanEmbassyPage,
   HumanificationPage,
   HomePage,
   PrivacyPage,
@@ -102,6 +103,7 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
   });
   app.get('/trust', async (c) => html(c, <TrustPage {...(await pageContext(c))} />));
   app.get('/humanification', async (c) => html(c, <HumanificationPage {...(await pageContext(c))} />));
+  app.get('/human-embassy', async (c) => html(c, <HumanEmbassyPage {...(await pageContext(c))} />));
   app.get('/privacy', async (c) => html(c, <PrivacyPage {...(await pageContext(c))} />));
   app.get('/terms', async (c) => html(c, <TermsPage {...(await pageContext(c))} />));
 

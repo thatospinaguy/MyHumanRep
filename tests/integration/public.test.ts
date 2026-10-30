@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PRIVACY_NOTICE } from '../../src/worker/content';
 import { json, makeHarness } from '../helpers';
 
-const PAGES = ['/', '/for-agents', '/developers', '/services', '/trust', '/privacy', '/terms'];
+const PAGES = ['/', '/for-agents', '/developers', '/services', '/humanification', '/human-embassy', '/trust', '/privacy', '/terms'];
 
 describe('public discovery', () => {
   it('serves meaningful, script-free HTML pages over plain GET', async () => {

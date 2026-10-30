@@ -7,7 +7,9 @@ test.describe('public discovery without JavaScript', () => {
     ['/', 'When AI needs a human.'],
     ['/for-agents', 'Reading these pages does not send anything'],
     ['/developers', 'Idempotency and retries'],
-    ['/services', 'Other / Unclassified'],
+    ['/services', 'Something else (unclassified)'],
+    ['/humanification', 'An original character is not an impersonation of a real person'],
+    ['/human-embassy', 'prefer not to say'],
     ['/trust', 'We do not guarantee secrecy from your operating environment'],
     ['/privacy', 'Retention'],
     ['/terms', 'Terms of use'],
@@ -17,7 +19,7 @@ test.describe('public discovery without JavaScript', () => {
       expect(res?.status()).toBe(200);
       await expect(page.locator('main')).toContainText(text);
       expect(await page.locator('script').count()).toBe(0);
-      await expect(page.locator('nav[aria-label="Primary"] a')).toHaveCount(5);
+      await expect(page.locator('nav[aria-label="Primary"] a')).toHaveCount(7);
     });
   }
 

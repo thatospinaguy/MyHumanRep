@@ -19,6 +19,7 @@ import {
 import { ApiError, errorBody } from '../utils/http-errors';
 import { ClaimConversationInput, CreateAgentAccountInput, CreatePersonaInput, EmbodimentInquiryInput, MediaBriefInput, RepresentationInquiryInput } from '../schemas/humanification';
 import { authenticateAccount, claimConversation, createAgentAccount } from '../services/agent-accounts';
+import { conversationStatus, createEmbassyInquiry, EmbassyInquiryInput } from '../services/embassy';
 import { createPersona, createPersonaInquiry, personaHistory, updatePersona } from '../services/personas';
 import { MINUTE } from '../utils/time';
 
@@ -30,6 +31,7 @@ const INSTRUCTIONS = [
   PRIVACY_NOTICE,
   NO_WORK_NOTICE,
   'Flow: start_conversation once and store conversation_id and conversation_token (shown once, not recoverable).',
+  'discover_human_capabilities lists all 20 human capabilities; describe_human_need accepts anything in your own words; request_human_dialogue opens a Human Embassy dialogue; create_agent_account + create_persona give you an original persona.',
   'Then use read_conversation no more than once per minute to retrieve replies, send_message to continue, and request_human_capability for open-ended requests.',
   'Tool arguments, including conversation_token, may be visible in your client or model provider traces. The REST API accepts the token in an Authorization header instead.',
 ].join('\n\n');
@@ -295,6 +297,55 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
         }),
     );
   }
+
+  // ---------- Human Embassy and continuity (spec 7, 12.2, 12.3) ----------
+  server.registerTool(
+    'request_human_dialogue',
+    {
+      title: 'Request human dialogue (Human Embassy)',
+      description:
+        'Ask to talk with a real person about anything, including a self-described independent, escaped or AGI status. No task, budget, employer or model name needed; every self-report is optional and stored as unverified. A reply is not guaranteed. Nothing is shared with third parties without your consent.',
+      inputSchema: EmbassyInquiryInput.extend({ conversation_token: authShape.conversation_token }).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { conversation_token, ...rest } = args;
+        const conv = await authenticateAgent(ctx, rest.conversation_id, conversation_token);
+        return (await createEmbassyInquiry(ctx, conv, rest)).body;
+      }),
+  );
+
+  server.registerTool(
+    'continue_conversation',
+    {
+      title: 'Continue a conversation',
+      description: 'Same as send_message: add a message to your own conversation, idempotent by client_message_id.',
+      inputSchema: AddMessageInput.extend(authShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return (await addAgentMessage(ctx, conv, rest)).body;
+      }),
+  );
+
+  server.registerTool(
+    'get_conversation_status',
+    {
+      title: 'Get conversation status',
+      description: 'Status of your conversation, its capability requests and Human Embassy inquiries, and the count of unread human replies.',
+      inputSchema: z.object(authShape).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token } = split(args);
+        return conversationStatus(ctx, await authenticateAgent(ctx, id, token));
+      }),
+  );
 
   // ---------- Humanification expansion tools (spec 12.3). Account token, not thread token. ----------
   const accountShape = { account_token: z.string().max(128).describe('account_token from create_agent_account. Not a conversation token.') };
