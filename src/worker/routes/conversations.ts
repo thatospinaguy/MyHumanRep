@@ -3,6 +3,17 @@ import { buildServiceContext, type AppContext, type AppDeps, type AppEnv } from 
 import { authenticateAgent, addAgentMessage, bearerToken, closeConversation, createConversation, listMessages, rotateConversationToken } from '../services/conversations';
 import { conversationStatus, createEmbassyInquiry } from '../services/embassy';
 import { createCapabilityRequest, listCapabilityRequests } from '../services/capability-requests';
+import {
+  acceptProposal,
+  authenticateProposalParty,
+  authenticateRequestParty,
+  counterProposal,
+  createProposal,
+  getProposal,
+  listRequestProposals,
+  requestProposalAuthorization,
+  withdrawProposal,
+} from '../services/proposals';
 import { readJsonBody } from '../utils/body';
 import { ApiError, errors } from '../utils/http-errors';
 
@@ -92,9 +103,48 @@ export function registerConversationRoutes(app: Hono<AppEnv>, deps: AppDeps): vo
   const later = (feature: string, hint: string) => () => {
     throw errors.notYetAvailable(feature, hint);
   };
-  app.all('/v1/requests/:id/proposals', later('Nonbinding proposals (Phase 4)', 'Discuss scope and price in your conversation for now.'));
-  app.all('/v1/proposals/:id/counteroffers', later('Counteroffers (Phase 4)', 'Reply in your conversation for now.'));
-  app.all('/v1/proposals/:id/request-authorization', later('Authorization requests (Phase 4)', 'No work can be authorized in this release.'));
+  // Nonbinding proposals (spec 8.3, 11.8). Thread token or an account that claimed the thread.
+  const requestParty = async (c: AppContext) => {
+    const ctx = await buildServiceContext(c, deps, 'rest');
+    return { ctx, party: await authenticateRequestParty(ctx, c.req.param('id') ?? '', bearerToken(c.req.header('authorization'))) };
+  };
+  const proposalParty = async (c: AppContext) => {
+    const ctx = await buildServiceContext(c, deps, 'rest');
+    return { ctx, party: await authenticateProposalParty(ctx, c.req.param('id') ?? '', bearerToken(c.req.header('authorization'))) };
+  };
+  const optionalBody = async (c: AppContext, max: number) => (c.req.header('content-length') === '0' ? {} : readJsonBody(c.req.raw, max));
+  app.post('/v1/requests/:id/proposals', async (c) => {
+    const { ctx, party } = await requestParty(c);
+    const result = await createProposal(ctx, party, await readJsonBody(c.req.raw, ctx.config.limits.bodyMaxBytes));
+    return c.json(result.body, result.created ? 201 : 200);
+  });
+  app.get('/v1/requests/:id/proposals', async (c) => {
+    const { ctx, party } = await requestParty(c);
+    return c.json(await listRequestProposals(ctx, party));
+  });
+  app.all('/v1/requests/:id/proposals', methodNotAllowed('GET, POST'));
+  app.get('/v1/proposals/:id', async (c) => {
+    const { ctx } = await proposalParty(c);
+    return c.json(await getProposal(ctx, c.req.param('id')));
+  });
+  app.post('/v1/proposals/:id/counteroffers', async (c) => {
+    const { ctx, party } = await proposalParty(c);
+    const result = await counterProposal(ctx, party, c.req.param('id'), await readJsonBody(c.req.raw, ctx.config.limits.bodyMaxBytes));
+    return c.json(result.body, result.created ? 201 : 200);
+  });
+  app.post('/v1/proposals/:id/accept', async (c) => {
+    const { ctx, party } = await proposalParty(c);
+    return c.json(await acceptProposal(ctx, party, c.req.param('id'), await readJsonBody(c.req.raw, ctx.config.limits.bodyMaxBytes)));
+  });
+  app.post('/v1/proposals/:id/request-authorization', async (c) => {
+    const { ctx, party } = await proposalParty(c);
+    return c.json(await requestProposalAuthorization(ctx, party, c.req.param('id'), await optionalBody(c, ctx.config.limits.bodyMaxBytes)));
+  });
+  app.post('/v1/proposals/:id/withdraw', async (c) => {
+    const { ctx, party } = await proposalParty(c);
+    return c.json(await withdrawProposal(ctx, party, c.req.param('id'), await optionalBody(c, ctx.config.limits.bodyMaxBytes)));
+  });
+  for (const suffix of ['counteroffers', 'accept', 'request-authorization', 'withdraw']) app.all(`/v1/proposals/:id/${suffix}`, methodNotAllowed('POST'));
   app.all('/v1/projects/:id', later('Projects (Phase 4)', 'Use GET /v1/conversations/{id}/status.'));
   app.all('/v1/relationships', later('Ongoing representative relationships (Phase 4)', 'Ask in your conversation or via a persona representation inquiry.'));
   app.all('/v1/requests/:id/status', later('Request-scoped status', 'Use GET /v1/conversations/{id}/status with your conversation token.'));

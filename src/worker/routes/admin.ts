@@ -21,6 +21,15 @@ import { parseInput } from '../services/context';
 import { getMetrics, metricsToCsvRows } from '../services/metrics';
 import { getSettings, SettingsPatchSchema, settingsUpsertStatements } from '../services/settings';
 import { MetricsQuery } from '../schemas/admin';
+import {
+  acceptProposalAdmin,
+  counterProposalAdmin,
+  createProposalAdmin,
+  decideProposalAdmin,
+  getProposalAdmin,
+  listProposalsAdmin,
+  listRequestProposalsAdmin,
+} from '../services/admin-proposals';
 import { getEmbassyInquiry, listEmbassy, patchEmbassyInquiry, patchSelfReport, researchSummary } from '../services/admin-embassy';
 import {
   deletePersonaAdmin,
@@ -210,9 +219,13 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.all('/admin/api/representatives/:id', () => {
     throw errors.notYetAvailable('Human representative network (Phase 5)');
   });
-  app.all('/admin/api/proposals', () => {
-    throw errors.notYetAvailable('Proposal queue (Phase 4)');
-  });
+  app.get('/admin/api/proposals', async (c) => c.json(await listProposalsAdmin(adminCtx(c), c.req.query('status'))));
+  app.get('/admin/api/proposals/:id', async (c) => c.json(await getProposalAdmin(adminCtx(c), c.req.param('id'))));
+  app.post('/admin/api/proposals/:id/counteroffers', async (c) => c.json(await counterProposalAdmin(adminCtx(c), c.req.param('id'), await body(c)), 201));
+  app.post('/admin/api/proposals/:id/accept', async (c) => c.json(await acceptProposalAdmin(adminCtx(c), c.req.param('id'), await body(c))));
+  app.post('/admin/api/proposals/:id/decision', async (c) => c.json(await decideProposalAdmin(adminCtx(c), c.req.param('id'), await body(c))));
+  app.get('/admin/api/capability-requests/:id/proposals', async (c) => c.json(await listRequestProposalsAdmin(adminCtx(c), c.req.param('id'))));
+  app.post('/admin/api/capability-requests/:id/proposals', async (c) => c.json(await createProposalAdmin(adminCtx(c), c.req.param('id'), await body(c)), 201));
 
   app.all('/admin/api/*', () => {
     throw new ApiError('not_found', 'Unknown admin endpoint.');

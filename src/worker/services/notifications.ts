@@ -32,6 +32,7 @@ const EVENT_LABELS: Record<string, string> = {
   embassy_inquiry: 'New Human Embassy inquiry',
   persona_inquiry: 'New persona embodiment or representation inquiry',
   candidate_capability: 'New candidate capability to review',
+  proposal: 'Nonbinding proposal activity',
 };
 
 /** Dashboard link: the conversation when there is one, otherwise the subject's admin page. */
@@ -189,7 +190,8 @@ export async function processOutbox(
 
     const attempts = row.attempts + 1;
     try {
-      await mailer.send(buildAlert(config, row.event_type, row.conversation_id ?? row.subject_id ?? '', row.created_at, row.conversation_id ? null : row.subject_type));
+      const labelKey = row.subject_type === 'proposal' ? 'proposal' : row.event_type;
+      await mailer.send(buildAlert(config, labelKey, row.conversation_id ?? row.subject_id ?? '', row.created_at, row.conversation_id ? null : row.subject_type));
       await finish(db, row.id, 'sent', attempts, null, nowIso);
       result.sent++;
     } catch (err) {

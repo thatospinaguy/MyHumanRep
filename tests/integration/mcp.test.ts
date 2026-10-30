@@ -54,6 +54,8 @@ describe.each<Era>(['modern', 'legacy'])('MCP over Streamable HTTP (%s era)', (e
     expect(info.mcp_url).toBe('https://myhumanrep.test/mcp');
     expect(info.claimed_agent_identity_verified).toBe(false);
     expect(info.automatic_task_execution).toBe(false);
+    // The discovery document lists exactly the tools the server serves.
+    expect([...info.mcp_tools].sort()).toEqual(tools.tools.map((t) => t.name).sort());
 
     const startRes = await client.callTool({
       name: 'start_conversation',

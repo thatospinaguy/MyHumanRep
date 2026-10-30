@@ -29,7 +29,7 @@ export function randomBytes(length: number): Uint8Array {
   return bytes;
 }
 
-export type IdPrefix = 'conv' | 'msg' | 'cap' | 'evt' | 'aud' | 'abuse' | 'req' | 'sr' | 'acct' | 'per' | 'prev' | 'emb' | 'pinq' | 'cand' | 'capdef';
+export type IdPrefix = 'conv' | 'msg' | 'cap' | 'evt' | 'aud' | 'abuse' | 'req' | 'sr' | 'acct' | 'per' | 'prev' | 'emb' | 'pinq' | 'cand' | 'capdef' | 'prop' | 'pevt' | 'proj' | 'rel';
 
 /** Opaque, non-sequential public identifier with 128 bits of randomness. */
 export function newId(prefix: IdPrefix): string {

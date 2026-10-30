@@ -21,6 +21,17 @@ import { ClaimConversationInput, CreateAgentAccountInput, CreatePersonaInput, Em
 import { authenticateAccount, claimConversation, createAgentAccount } from '../services/agent-accounts';
 import { conversationStatus, createEmbassyInquiry, EmbassyInquiryInput } from '../services/embassy';
 import { createPersona, createPersonaInquiry, personaHistory, updatePersona } from '../services/personas';
+import { AcceptProposalInput, CounterProposalInput, CreateProposalInput, ProposalNoteInput } from '../schemas/proposals';
+import {
+  acceptProposal,
+  authenticateProposalParty,
+  authenticateRequestParty,
+  counterProposal,
+  createProposal,
+  listRequestProposals,
+  requestProposalAuthorization,
+  withdrawProposal,
+} from '../services/proposals';
 import { MINUTE } from '../utils/time';
 
 export const SERVER_VERSION = '2.0.0';
@@ -453,6 +464,102 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
   inquiryTool('request_human_embodiment', 'Request human embodiment', 'Ask for a consenting human performer to portray your persona (fictional performance, voice acting, event presence).', 'embodiment', EmbodimentInquiryInput);
   inquiryTool('request_human_representative', 'Request a human representative', 'Ask for an authorized human spokesperson, representative or relationship manager for your persona.', 'representation', RepresentationInquiryInput);
   inquiryTool('request_persona_voice_brief', 'Submit a persona voice or appearance brief', 'Submit an original voice or appearance brief for human review (metadata only).', 'media_brief', MediaBriefInput);
+
+  // ---------- Nonbinding proposals (spec 8.3, 12.3). Thread token, or an account that claimed the thread. ----------
+  const partyShape = {
+    conversation_token: z.string().max(128).optional().describe('Token of the conversation the request belongs to. Provide this or account_token.'),
+    account_token: z.string().max(128).optional().describe('Account token, if your account claimed that conversation. Provide this or conversation_token.'),
+  };
+  const oneCredential = (v: { conversation_token?: string; account_token?: string }, c: z.RefinementCtx) => {
+    if (Boolean(v.conversation_token) === Boolean(v.account_token)) c.addIssue({ code: 'custom', message: 'Provide exactly one of conversation_token or account_token.' });
+  };
+  const credentialOf = (a: { conversation_token?: string; account_token?: string }) => a.conversation_token ?? a.account_token ?? null;
+  const strip = <T extends Record<string, unknown>>(args: T, ...keys: string[]) =>
+    Object.fromEntries(Object.entries(args).filter(([k]) => !['conversation_token', 'account_token', ...keys].includes(k)));
+  const proposalNote = ' Nonbinding: never a contract, charge, assignment or dispatch.';
+  const proposalRef = { ...partyShape, proposal_id: z.string().max(64) };
+
+  server.registerTool(
+    'create_nonbinding_proposal',
+    {
+      title: 'Propose scope and price',
+      description: `Proposes scope, deliverables, timing, location and an indicative price for one of your capability requests. A human reviews and may counter.${proposalNote}`,
+      inputSchema: CreateProposalInput.extend({ request_id: z.string().max(64), ...partyShape }).strict().superRefine(oneCredential),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const party = await authenticateRequestParty(ctx, args.request_id, credentialOf(args));
+        return (await createProposal(ctx, party, strip(args, 'request_id'))).body;
+      }),
+  );
+  server.registerTool(
+    'counter_nonbinding_proposal',
+    {
+      title: 'Counter a proposal',
+      description: `Creates a new revision with the terms you change; omitted terms carry over. Any change after agreement voids it, so both sides must accept again.${proposalNote}`,
+      inputSchema: CounterProposalInput.extend(proposalRef).strict().superRefine(oneCredential),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const party = await authenticateProposalParty(ctx, args.proposal_id, credentialOf(args));
+        return (await counterProposal(ctx, party, args.proposal_id, strip(args, 'proposal_id'))).body;
+      }),
+  );
+  server.registerTool(
+    'accept_nonbinding_proposal',
+    {
+      title: 'Accept proposal terms (nonbinding)',
+      description: `Accepts the human's current revision as nonbinding terms. Pass the revision number you read.${proposalNote}`,
+      inputSchema: AcceptProposalInput.extend(proposalRef).strict().superRefine(oneCredential),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const party = await authenticateProposalParty(ctx, args.proposal_id, credentialOf(args));
+        return acceptProposal(ctx, party, args.proposal_id, strip(args, 'proposal_id'));
+      }),
+  );
+  server.registerTool(
+    'request_proposal_authorization',
+    {
+      title: 'Request authorization review',
+      description: 'After both sides accept, asks a human to review authorization. Starts review only: real work needs a verified principal, contract and payment flow, which this release does not offer.',
+      inputSchema: ProposalNoteInput.extend(proposalRef).strict().superRefine(oneCredential),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const party = await authenticateProposalParty(ctx, args.proposal_id, credentialOf(args));
+        return requestProposalAuthorization(ctx, party, args.proposal_id, strip(args, 'proposal_id'));
+      }),
+  );
+  server.registerTool(
+    'withdraw_nonbinding_proposal',
+    {
+      title: 'Withdraw a proposal',
+      description: 'Withdraws an open proposal. Nothing was charged or scheduled.',
+      inputSchema: ProposalNoteInput.extend(proposalRef).strict().superRefine(oneCredential),
+      annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const party = await authenticateProposalParty(ctx, args.proposal_id, credentialOf(args));
+        return withdrawProposal(ctx, party, args.proposal_id, strip(args, 'proposal_id'));
+      }),
+  );
+  server.registerTool(
+    'get_proposal_history',
+    {
+      title: 'Read proposal history',
+      description: 'Every proposal on a capability request, with all revisions and events, as both sides see them.',
+      inputSchema: z.object({ request_id: z.string().max(64), ...partyShape }).strict().superRefine(oneCredential),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => listRequestProposals(ctx, await authenticateRequestParty(ctx, args.request_id, credentialOf(args)))),
+  );
 
   return server;
 }

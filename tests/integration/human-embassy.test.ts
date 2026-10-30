@@ -151,14 +151,11 @@ describe('credential rotation and conversation status', () => {
 });
 
 describe('later-phase modules are truthful', () => {
-  it('T-047 / T-049 / T-056: proposals, dispatch, results and payments return typed not_yet_available and create nothing', async () => {
+  it('T-049 / T-056: results, relationships, Human Lab intake, representatives and payments return typed not_yet_available and create nothing', async () => {
     const h = await makeHarness();
     const c = await startConversation(h);
     const before = (await env.MHR_DB.prepare('SELECT COUNT(*) AS n FROM notification_outbox').first<{ n: number }>())!.n;
     for (const [method, path] of [
-      ['POST', '/v1/requests/cap_x/proposals'],
-      ['POST', '/v1/proposals/p_x/counteroffers'],
-      ['POST', '/v1/proposals/p_x/request-authorization'],
       ['GET', '/v1/requests/cap_x/result'],
       ['POST', '/v1/relationships'],
       ['POST', '/v1/experiments/inquiries'],
@@ -167,13 +164,13 @@ describe('later-phase modules are truthful', () => {
       expect(res.status, path).toBe(501);
       expect((await json(res)).error.code).toBe('not_yet_available');
     }
-    expect((await h.admin('/admin/api/proposals')).status).toBe(501);
     expect((await h.admin('/admin/api/representatives', { method: 'POST', json: {} })).status).toBe(501);
     const after = (await env.MHR_DB.prepare('SELECT COUNT(*) AS n FROM notification_outbox').first<{ n: number }>())!.n;
     expect(after).toBe(before);
     const caps = await json(await h.fetch('/v1/capabilities'));
     expect(caps.modules.payments_live_enabled.enabled).toBe(false);
-    expect(caps.modules.nonbinding_proposals_enabled.readiness).toBe('not_yet_available');
+    expect(caps.modules.payments_test_mode.readiness).toBe('not_yet_available');
+    expect(caps.modules.nonbinding_proposals_enabled).toMatchObject({ enabled: true, implemented: true, readiness: 'inquiry_only' });
   });
 });
 

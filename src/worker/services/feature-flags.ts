@@ -13,7 +13,7 @@ export const FLAG_DEFINITIONS = {
   persona_studio_enabled: { default: true, implemented: true, description: 'Agent accounts and original persona CRUD.' },
   embodiment_inquiries_enabled: { default: true, implemented: true, description: 'Persona embodiment, representation and media-brief inquiries (no assignment).' },
   persona_media_enabled: { default: false, implemented: false, description: 'Real avatar/voice uploads and synthesis.' },
-  nonbinding_proposals_enabled: { default: false, implemented: false, description: 'Versioned nonbinding proposals and counteroffers (Phase 4).' },
+  nonbinding_proposals_enabled: { default: true, implemented: true, description: 'Versioned nonbinding proposals and counteroffers. Never charges, contracts or dispatches.' },
   worker_portal_enabled: { default: false, implemented: false, description: 'Invite-only human provider portal (Phase 5).' },
   manual_fulfillment_enabled: { default: false, implemented: false, description: 'Assignments, evidence and results (Phases 5-6).' },
   payments_test_mode: { default: false, implemented: false, description: 'Sandbox payments (Phase 7).' },
