@@ -1,0 +1,176 @@
+import type { Hono } from 'hono';
+import { waitUntilOf, type AppContext, type AppDeps, type AppEnv } from '../app-types';
+import { assertSameOriginWrite, authenticateAdmin } from '../middleware/admin-auth';
+import {
+  clarifyRequest,
+  deleteConversation,
+  exportConversation,
+  getConversationDetail,
+  getRequestDetail,
+  listAudit,
+  listConversations,
+  listRequests,
+  patchConversation,
+  patchRequest,
+  replyToConversation,
+  toCsv,
+  type AdminContext,
+} from '../services/admin';
+import { auditStatement } from '../services/audit';
+import { parseInput } from '../services/context';
+import { getMetrics, metricsToCsvRows } from '../services/metrics';
+import { getSettings, SettingsPatchSchema, settingsUpsertStatements } from '../services/settings';
+import { MetricsQuery } from '../schemas/admin';
+import { readJsonBody } from '../utils/body';
+import { ApiError } from '../utils/http-errors';
+
+const ADMIN_BODY_MAX = 32 * 1024;
+
+function adminCtx(c: AppContext): AdminContext {
+  return {
+    db: c.env.MHR_DB,
+    config: c.get('config'),
+    now: c.get('now'),
+    actor: c.get('admin').email,
+    requestId: c.get('requestId'),
+  };
+}
+
+async function body(c: AppContext): Promise<unknown> {
+  return readJsonBody(c.req.raw, ADMIN_BODY_MAX);
+}
+
+function download(c: AppContext, content: string, filename: string, type: string): Response {
+  c.header('Content-Type', type);
+  c.header('Content-Disposition', `attachment; filename="${filename}"`);
+  c.header('Cache-Control', 'no-store');
+  return c.body(content);
+}
+
+export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
+  // Authentication and CSRF checks run before every admin route, API and UI alike.
+  app.use('/admin', async (c, next) => {
+    c.set('admin', await authenticateAdmin(c.req.raw, c.get('config'), deps.accessKeyResolver));
+    await next();
+  });
+  app.use('/admin/*', async (c, next) => {
+    c.set('admin', await authenticateAdmin(c.req.raw, c.get('config'), deps.accessKeyResolver));
+    if (c.req.path.startsWith('/admin/api/')) assertSameOriginWrite(c.req.raw, c.get('config'));
+    await next();
+  });
+
+  app.get('/admin/api/session', async (c) => {
+    const settings = await getSettings(c.env.MHR_DB, c.get('config'));
+    const admin = c.get('admin');
+    return c.json({
+      email: admin.email,
+      auth_mode: admin.mode,
+      environment: c.get('config').environment,
+      intake_enabled: settings.intake_enabled,
+      notify_provider: c.get('config').notifyProvider,
+    });
+  });
+
+  app.get('/admin/api/conversations', async (c) => c.json(await listConversations(adminCtx(c), c.req.query(), false)));
+  app.post('/admin/api/conversations/search', async (c) => c.json(await listConversations(adminCtx(c), await body(c), true)));
+  app.get('/admin/api/conversations/:id', async (c) => c.json(await getConversationDetail(adminCtx(c), c.req.param('id'))));
+  app.post('/admin/api/conversations/:id/reply', async (c) =>
+    c.json(await replyToConversation(adminCtx(c), c.req.param('id'), await body(c)), 201),
+  );
+  app.patch('/admin/api/conversations/:id', async (c) => c.json(await patchConversation(adminCtx(c), c.req.param('id'), await body(c))));
+  app.post('/admin/api/conversations/:id/export', async (c) => {
+    const id = c.req.param('id');
+    const data = await exportConversation(adminCtx(c), id);
+    return download(c, JSON.stringify(data, null, 2), `${id}.json`, 'application/json; charset=utf-8');
+  });
+  app.delete('/admin/api/conversations/:id', async (c) => c.json(await deleteConversation(adminCtx(c), c.req.param('id'), await body(c))));
+
+  app.get('/admin/api/capability-requests', async (c) => c.json(await listRequests(adminCtx(c), c.req.query())));
+  app.get('/admin/api/capability-requests/:id', async (c) => c.json(await getRequestDetail(adminCtx(c), c.req.param('id'))));
+  app.patch('/admin/api/capability-requests/:id', async (c) => c.json(await patchRequest(adminCtx(c), c.req.param('id'), await body(c))));
+  app.post('/admin/api/capability-requests/:id/clarify', async (c) =>
+    c.json(await clarifyRequest(adminCtx(c), c.req.param('id'), await body(c)), 201),
+  );
+
+  app.get('/admin/api/metrics', async (c) => {
+    const { format } = parseInput(MetricsQuery, c.req.query());
+    const metrics = await getMetrics(adminCtx(c));
+    if (format === 'csv') {
+      return download(c, toCsv(metricsToCsvRows(metrics), ['evidence', 'metric', 'value']), 'myhumanrep-metrics.csv', 'text/csv; charset=utf-8');
+    }
+    return c.json(metrics);
+  });
+
+  app.get('/admin/api/audit', async (c) => {
+    const result = await listAudit(adminCtx(c), c.req.query());
+    if (result.format === 'csv') {
+      const ctx = adminCtx(c);
+      waitUntilOf(c)(auditStatement(ctx.db, ctx.actor, 'audit.export', 'system', null, { rows: result.items.length }, ctx.now).run());
+      return download(
+        c,
+        toCsv(result.items, ['created_at', 'admin_subject', 'action', 'target_type', 'target_id', 'metadata']),
+        'myhumanrep-audit.csv',
+        'text/csv; charset=utf-8',
+      );
+    }
+    return c.json({ items: result.items, next_cursor: result.next_cursor });
+  });
+
+  app.get('/admin/api/settings', async (c) => {
+    const config = c.get('config');
+    return c.json({
+      settings: await getSettings(c.env.MHR_DB, config),
+      read_only: {
+        environment: config.environment,
+        public_base_url: config.baseUrl,
+        notify_provider: config.notifyProvider,
+        notify_to_configured: config.notifyTo !== '',
+        admin_auth_mode: config.adminAuthMode,
+        limits: config.limits,
+      },
+    });
+  });
+  app.patch('/admin/api/settings', async (c) => {
+    const ctx = adminCtx(c);
+    const patch = parseInput(SettingsPatchSchema, await body(c));
+    const keys = Object.keys(patch);
+    if (keys.length === 0) throw new ApiError('invalid_request', 'Provide at least one setting.', { reason: 'empty_patch' });
+    await ctx.db.batch([
+      ...settingsUpsertStatements(ctx.db, patch, ctx.actor, ctx.now),
+      auditStatement(
+        ctx.db,
+        ctx.actor,
+        'settings.update',
+        'settings',
+        null,
+        {
+          changed: keys,
+          ...(patch.intake_enabled !== undefined ? { intake_enabled: patch.intake_enabled } : {}),
+          ...(patch.notifications_enabled !== undefined ? { notifications_enabled: patch.notifications_enabled } : {}),
+        },
+        ctx.now,
+      ),
+    ]);
+    return c.json({ settings: await getSettings(ctx.db, ctx.config) });
+  });
+
+  app.all('/admin/api/*', () => {
+    throw new ApiError('not_found', 'Unknown admin endpoint.');
+  });
+
+  // Admin SPA: served from the built assets only after authentication succeeded above.
+  const serveSpa = async (c: AppContext) => {
+    const assets = c.env.ASSETS;
+    if (!assets) return c.text('Admin UI not built. Run npm run build.', 503);
+    const url = new URL(c.req.url);
+    const isAsset = /^\/admin\/assets\/[A-Za-z0-9._-]+$/.test(url.pathname);
+    const target = new URL(isAsset ? url.pathname : '/admin/index.html', url.origin);
+    const res = await assets.fetch(new Request(target.toString(), { method: 'GET' }));
+    if (!res.ok && isAsset) return c.text('Not found', 404);
+    const headers = new Headers(res.headers);
+    headers.set('Cache-Control', 'no-store');
+    return new Response(res.body, { status: res.status, headers });
+  };
+  app.get('/admin', (c) => c.redirect('/admin/', 302));
+  app.get('/admin/*', serveSpa);
+}

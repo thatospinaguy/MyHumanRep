@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+# Generate a key with: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+CONVERSATION_TOKEN_HMAC_KEY=replace-with-at-least-32-random-characters
+# Optional, only during key rotation:
+# CONVERSATION_TOKEN_HMAC_KEY_PREVIOUS=
+# Only if NOTIFY_PROVIDER=resend:
+# RESEND_API_KEY=

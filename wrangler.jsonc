@@ -1,0 +1,132 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Local development defaults. Staging and production are under "env" below.
+  // Never put secrets in this file. Use `wrangler secret put` (remote) or .dev.vars (local).
+  "name": "myhumanrep-agent-contact",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // Built admin SPA only (vite build). Public pages are rendered by the Worker.
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    // Every request goes through the Worker first so /admin/* is always
+    // auth-checked and every response gets security headers.
+    "run_worker_first": true,
+    "not_found_handling": "none",
+    "html_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "MHR_DB",
+      "database_name": "myhumanrep-agent-contact-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "RL_PUBLIC",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *", "0 4 * * *"]
+  },
+  // Our own structured logs contain no bodies, tokens, IPs or full IDs. Platform invocation logs are
+  // disabled because they may record request metadata; review their contents before enabling.
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "PUBLIC_BASE_URL": "http://localhost:8787",
+    "ALIAS_HOSTS": "",
+    "DEFAULT_RETENTION_DAYS": "30",
+    "INTAKE_ENABLED": "true",
+    "ADMIN_AUTH_MODE": "dev_insecure",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    "ADMIN_EMAILS": "dev@localhost",
+    "MCP_ALLOWED_ORIGINS": "",
+    "HSTS_ENABLED": "false",
+    "NOTIFY_PROVIDER": "log",
+    "NOTIFY_TO": "",
+    "NOTIFY_FROM": ""
+  },
+  "env": {
+    "staging": {
+      "name": "myhumanrep-agent-contact-staging",
+      "d1_databases": [
+        {
+          "binding": "MHR_DB",
+          "database_name": "myhumanrep-agent-contact-staging",
+          "database_id": "REPLACE_WITH_STAGING_D1_DATABASE_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        {
+          "name": "RL_PUBLIC",
+          "namespace_id": "1002",
+          "simple": { "limit": 30, "period": 60 }
+        }
+      ],
+      "triggers": { "crons": ["*/5 * * * *", "0 4 * * *"] },
+      "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "PUBLIC_BASE_URL": "https://REPLACE_WITH_STAGING_HOST",
+        "ALIAS_HOSTS": "",
+        "DEFAULT_RETENTION_DAYS": "30",
+        "INTAKE_ENABLED": "false",
+        "ADMIN_AUTH_MODE": "access",
+        "ACCESS_TEAM_DOMAIN": "https://REPLACE_WITH_TEAM.cloudflareaccess.com",
+        "ACCESS_AUD": "REPLACE_WITH_STAGING_ACCESS_AUD_TAG",
+        "ADMIN_EMAILS": "REPLACE_WITH_OWNER_EMAIL",
+        "MCP_ALLOWED_ORIGINS": "",
+        "HSTS_ENABLED": "false",
+        "NOTIFY_PROVIDER": "none",
+        "NOTIFY_TO": "",
+        "NOTIFY_FROM": ""
+      }
+    },
+    "production": {
+      "name": "myhumanrep-agent-contact",
+      "d1_databases": [
+        {
+          "binding": "MHR_DB",
+          "database_name": "myhumanrep-agent-contact",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "ratelimits": [
+        {
+          "name": "RL_PUBLIC",
+          "namespace_id": "1003",
+          "simple": { "limit": 30, "period": 60 }
+        }
+      ],
+      "triggers": { "crons": ["*/5 * * * *", "0 4 * * *"] },
+      "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
+      // Uncomment after Email Routing is enabled and the owner address is verified.
+      // "send_email": [{ "name": "SEND_EMAIL", "destination_address": "REPLACE_WITH_VERIFIED_OWNER_EMAIL" }],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "PUBLIC_BASE_URL": "https://myhumanrep.com",
+        "ALIAS_HOSTS": "myhumanrep.ca,www.myhumanrep.ca,www.myhumanrep.com",
+        "DEFAULT_RETENTION_DAYS": "30",
+        // Public intake stays closed until the owner explicitly turns it on.
+        "INTAKE_ENABLED": "false",
+        "ADMIN_AUTH_MODE": "access",
+        "ACCESS_TEAM_DOMAIN": "https://REPLACE_WITH_TEAM.cloudflareaccess.com",
+        "ACCESS_AUD": "REPLACE_WITH_PRODUCTION_ACCESS_AUD_TAG",
+        "ADMIN_EMAILS": "REPLACE_WITH_OWNER_EMAIL",
+        "MCP_ALLOWED_ORIGINS": "",
+        "HSTS_ENABLED": "false",
+        "NOTIFY_PROVIDER": "none",
+        "NOTIFY_TO": "",
+        "NOTIFY_FROM": ""
+      }
+    }
+  }
+}
