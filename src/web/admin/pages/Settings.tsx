@@ -14,6 +14,7 @@ interface SettingsResponse {
     first_contact_per_source_per_hour: number;
     first_contact_global_per_day: number;
   };
+  feature_flags: Record<string, { enabled: boolean; implemented: boolean; readiness: string; description: string }>;
   read_only: Record<string, unknown>;
 }
 
@@ -98,6 +99,29 @@ export function Settings({ onChanged }: { onChanged: () => void }) {
           Save settings
         </button>
       </form>
+      <section className="panel narrow">
+        <h2>Modules (server-side feature flags)</h2>
+        <p className="muted small">
+          Enforced on the server. Modules without code in this build are locked off; payments additionally need your written approval.
+        </p>
+        <ul className="plain">
+          {Object.entries(data.feature_flags).map(([key, f]) => (
+            <li key={key}>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={f.enabled}
+                  disabled={!f.implemented || action.busy}
+                  onChange={(e) =>
+                    void action.run(() => api.patch('/settings', { feature_flags: { [key]: e.target.checked } }), `${key} ${e.target.checked ? 'enabled' : 'disabled'}.`).then(reload)
+                  }
+                />{' '}
+                <code>{key}</code> <span className="muted small">{f.description}</span> {!f.implemented && <span className="badge">not yet available</span>}
+              </label>
+            </li>
+          ))}
+        </ul>
+      </section>
       <section className="panel narrow">
         <h2>Deployment configuration (read only)</h2>
         <p className="muted small">Secrets are never shown here. Change these with Wrangler configuration and secrets.</p>

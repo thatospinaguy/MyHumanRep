@@ -104,3 +104,4 @@ pre.body { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin
 .empty { padding: 24px; text-align: center; color: var(--muted); background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; overflow-wrap: anywhere; }
+.contents { display: contents; }

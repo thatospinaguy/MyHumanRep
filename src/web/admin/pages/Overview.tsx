@@ -56,6 +56,15 @@ function CountTable({ title, counts, note }: { title: string; counts: Counts; no
 
 export function Overview() {
   const { data, error, loading } = useLoad(() => api.get<Metrics>('/metrics'), []);
+  const research = useLoad(
+    () =>
+      api.get<{
+        caveats: Record<string, string>;
+        observed: Record<string, Counts | number>;
+        claimed: { self_reports_by_type_value_evidence: Counts };
+      }>('/research/summary'),
+    [],
+  );
   const o = data?.observed;
   const openRequests = o
     ? ['submitted', 'triaging', 'clarification_requested', 'needs_authorization'].reduce(
@@ -112,6 +121,26 @@ export function Overview() {
             <CountTable title="Abuse signals, last 7 days" counts={o.abuse_events_last_7d} />
             <CountTable title="Owner alerts by status" counts={o.notifications_by_status} />
           </div>
+          {research.data && (
+            <>
+              <h2>Research view (provenance-aware)</h2>
+              <ul className="muted small">
+                {Object.values(research.data.caveats).map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+              <div className="grid">
+                <CountTable title="Human Embassy inquiries (observed)" counts={research.data.observed.embassy_inquiries_by_status as Counts} />
+                <CountTable title="Requests by classification (observed)" counts={research.data.observed.requests_by_classification as Counts} />
+                <CountTable title="Persona inquiries by kind (observed)" counts={research.data.observed.persona_inquiries_by_kind as Counts} />
+                <CountTable
+                  title="Self-reports by claim and evidence status"
+                  counts={research.data.claimed.self_reports_by_type_value_evidence}
+                  note="Claims, not facts. Changing evidence status never changes access."
+                />
+              </div>
+            </>
+          )}
           <p>
             <a href="/admin/api/metrics?format=csv" download>
               Download aggregate metrics (CSV)
