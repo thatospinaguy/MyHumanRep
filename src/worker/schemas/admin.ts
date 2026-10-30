@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { freeText, shortLabel, text } from './fields';
-import { CLAIMED_AUTONOMY, CONVERSATION_STATUSES, INTENTS, REQUEST_STATUSES } from './api';
+import { ACCEPTED_AUTONOMY_VALUES, CONVERSATION_STATUSES, INTENTS_EXTENDED, REQUEST_STATUSES } from './api';
 
 const isoDate = z
   .string()
@@ -11,9 +11,9 @@ export const CONVERSATION_FILTER_STATUSES = [...CONVERSATION_STATUSES, 'blocked'
 export const ConversationListQuery = z
   .object({
     status: z.enum(CONVERSATION_FILTER_STATUSES).optional(),
-    intent: z.enum(INTENTS).optional(),
+    intent: z.enum(INTENTS_EXTENDED).optional(),
     priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
-    claimed_autonomy: z.enum(CLAIMED_AUTONOMY).optional(),
+    claimed_autonomy: z.enum(ACCEPTED_AUTONOMY_VALUES).optional(),
     has_requests: z.enum(['true', 'false']).optional(),
     from: isoDate.optional(),
     to: isoDate.optional(),
@@ -47,7 +47,7 @@ export const ConversationPatchInput = z
       .max(20)
       .optional(),
     internal_notes: z.union([freeText('Private owner note.', 5000), z.literal(''), z.null()]).optional(),
-    intent: z.enum(INTENTS).optional(),
+    intent: z.enum(INTENTS_EXTENDED).optional(),
     under_review: z.boolean().optional(),
     retention_hold: z.boolean().optional(),
     extend_days: z.number().int().min(1).max(365).optional(),
@@ -73,6 +73,7 @@ export const RequestPatchInput = z
     public_status_note: z.union([freeText('Agent-visible status note.', 2000), z.literal(''), z.null()]).optional(),
     internal_notes: z.union([freeText('Private owner note.', 5000), z.literal(''), z.null()]).optional(),
     internal_category: z.union([shortLabel('Owner research taxonomy label.', 64), z.literal(''), z.null()]).optional(),
+    capability_slugs: z.array(z.string().max(64)).max(10).optional().describe('Owner-confirmed registry classification.'),
     message_to_agent: text({
       maxChars: 4000,
       maxBytes: 10 * 1024,

@@ -57,6 +57,7 @@
     "verify:openapi": "node scripts/verify-openapi.ts",
     "smoke:rest": "node scripts/smoke-rest.ts",
     "smoke:mcp": "node scripts/smoke-mcp.ts",
-    "validate:registry": "node scripts/validate-server-json.ts"
+    "validate:registry": "node scripts/validate-server-json.ts",
+    "gen:capabilities": "node scripts/gen-capability-seed.ts"
   }
 }

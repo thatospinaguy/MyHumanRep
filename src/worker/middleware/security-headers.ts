@@ -39,5 +39,7 @@ export function applySecurityHeaders(response: Response, path: string, config: C
   }
   if (config.hstsEnabled) headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   if (!headers.has('Cache-Control')) headers.set('Cache-Control', 'no-store');
+  // Private (no-store) responses are never indexable (ACC-14).
+  if (headers.get('Cache-Control') === 'no-store') headers.set('X-Robots-Tag', 'noindex, nofollow');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

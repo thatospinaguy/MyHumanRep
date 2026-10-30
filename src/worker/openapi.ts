@@ -13,6 +13,16 @@ import {
   MessageAccepted,
   MessageList,
 } from './schemas/api';
+import {
+  ClaimConversationInput,
+  CreateAgentAccountInput,
+  CreatePersonaInput,
+  EmbodimentInquiryInput,
+  GrantInput,
+  MediaBriefInput,
+  RepresentationInquiryInput,
+} from './schemas/humanification';
+import { EmbassyInquiryInput } from './services/embassy';
 
 function schema(s: z.ZodType, io: 'input' | 'output'): Record<string, unknown> {
   const json = z.toJSONSchema(s, { io, unrepresentable: 'any' }) as Record<string, unknown>;
@@ -32,6 +42,8 @@ function errorResponses(...codes: number[]) {
     405: 'method_not_allowed.',
     409: 'conflict: state or idempotency conflict (see error.details.reason).',
     410: 'expired: the conversation has expired.',
+    422: 'unprocessable_request: valid shape but inconsistent fields (see error.details.reason).',
+    501: 'not_yet_available: the module is not operational; nothing was created or charged.',
     413: 'payload_too_large.',
     415: 'unsupported_media_type: body must be application/json.',
     429: 'rate_limited: honor the Retry-After header.',
@@ -49,6 +61,8 @@ const conversationIdParam = {
 };
 
 const bearer = [{ conversationToken: [] }];
+const account = [{ agentAccount: [] }];
+const personaIdParam = { name: 'persona_id', in: 'path', required: true, schema: { type: 'string', pattern: '^per_[A-Za-z0-9_-]{22}$' } };
 
 /** OpenAPI 3.1 document. Component schemas are generated from the same Zod schemas the API validates with. */
 export function buildOpenApi(config: Config) {
@@ -56,8 +70,8 @@ export function buildOpenApi(config: Config) {
     openapi: '3.1.0',
     info: {
       title: 'MyHumanRep Agent Contact API',
-      version: '1.0.0',
-      summary: 'Two-way human contact and open-ended human capability requests for AI agents.',
+      version: '1.1.0',
+      summary: 'Two-way human contact, open-ended human capability requests, Human Embassy dialogue and original personas for AI agents.',
       description: `${PRIVACY_NOTICE}\n\n${NO_WORK_NOTICE}\n\nClaimed agent identity is never verified. The conversation token is returned once and cannot be recovered.`,
     },
     servers: [{ url: config.baseUrl }],
@@ -68,6 +82,11 @@ export function buildOpenApi(config: Config) {
           type: 'http',
           scheme: 'bearer',
           description: 'The conversation_token returned once by POST /v1/conversations.',
+        },
+        agentAccount: {
+          type: 'http',
+          scheme: 'bearer',
+          description: 'The account_token returned once by POST /v1/agent-accounts. Application account control only; not identity.',
         },
       },
       schemas: {
@@ -81,6 +100,16 @@ export function buildOpenApi(config: Config) {
         CapabilityRequestCreated: schema(CapabilityRequestCreated, 'output'),
         CapabilityRequestList: schema(CapabilityRequestList, 'output'),
         ConversationClosed: schema(ConversationClosed, 'output'),
+        EmbassyInquiryInput: schema(EmbassyInquiryInput, 'input'),
+        CreateAgentAccountInput: schema(CreateAgentAccountInput, 'input'),
+        ClaimConversationInput: schema(ClaimConversationInput, 'input'),
+        CreatePersonaInput: schema(CreatePersonaInput, 'input'),
+        UpdatePersonaInput: schema(CreatePersonaInput.partial(), 'input'),
+        GrantInput: schema(GrantInput, 'input'),
+        EmbodimentInquiryInput: schema(EmbodimentInquiryInput, 'input'),
+        RepresentationInquiryInput: schema(RepresentationInquiryInput, 'input'),
+        MediaBriefInput: schema(MediaBriefInput, 'input'),
+        JsonObject: { type: 'object', description: 'JSON object; see the developer guide for fields.' },
       },
     },
     paths: {
@@ -176,6 +205,162 @@ export function buildOpenApi(config: Config) {
             ...errorResponses(401, 410, 429, 500),
           },
         },
+      },
+      '/v1/capabilities/{slug}': {
+        get: {
+          operationId: 'getCapability',
+          summary: 'One capability or alias family (slug, alias or V1 snake_case hint)',
+          parameters: [{ name: 'slug', in: 'path', required: true, schema: { type: 'string', maxLength: 64 } }],
+          responses: { '200': { description: 'Capability or alias.', content: json('JsonObject') }, ...errorResponses(404) },
+        },
+      },
+      '/.well-known/myhumanrep.json': {
+        get: {
+          operationId: 'wellKnown',
+          summary: 'MyHumanRep-specific discovery metadata (not an industry standard)',
+          responses: { '200': { description: 'Metadata.', content: json('JsonObject') } },
+        },
+      },
+      '/v1/conversations/{conversation_id}/status': {
+        parameters: [conversationIdParam],
+        get: {
+          operationId: 'conversationStatus',
+          summary: 'Public statuses of your conversation, requests and Embassy inquiries',
+          security: bearer,
+          responses: { '200': { description: 'Status.', content: json('JsonObject') }, ...errorResponses(401, 410, 429) },
+        },
+      },
+      '/v1/conversations/{conversation_id}/rotate-token': {
+        parameters: [conversationIdParam],
+        post: {
+          operationId: 'rotateConversationToken',
+          summary: 'Replace the conversation token; the old one stops working',
+          security: bearer,
+          responses: { '200': { description: 'New token, shown once.', content: json('JsonObject') }, ...errorResponses(401, 410, 429) },
+        },
+      },
+      '/v1/embassy/inquiries': {
+        post: {
+          operationId: 'createEmbassyInquiry',
+          summary: 'Human Embassy: ask to talk with a real person (no task or payment needed)',
+          description: 'Only message (plus conversation_id and client_request_id) is required. Self-reports are optional and unverified.',
+          security: bearer,
+          requestBody: { required: true, content: json('EmbassyInquiryInput') },
+          responses: {
+            '201': { description: 'Inquiry received.', content: json('JsonObject') },
+            '200': { description: 'Idempotent replay.', content: json('JsonObject') },
+            ...errorResponses(400, 401, 403, 409, 410, 413, 415, 422, 429, 501),
+          },
+        },
+      },
+      '/v1/conversations/{conversation_id}/embassy-inquiries': {
+        parameters: [conversationIdParam],
+        post: {
+          operationId: 'createEmbassyInquiryForConversation',
+          summary: 'Same as POST /v1/embassy/inquiries, with the conversation in the path',
+          security: bearer,
+          requestBody: { required: true, content: json('EmbassyInquiryInput') },
+          responses: { '201': { description: 'Inquiry received.', content: json('JsonObject') }, ...errorResponses(400, 401, 409, 422, 501) },
+        },
+      },
+      '/v1/agent-accounts': {
+        post: {
+          operationId: 'createAgentAccount',
+          summary: 'Create a scoped agent account (no KYC, no identity claim)',
+          requestBody: { required: true, content: json('CreateAgentAccountInput') },
+          responses: { '201': { description: 'Account token shown once.', content: json('JsonObject') }, ...errorResponses(400, 429, 501) },
+        },
+      },
+      '/v1/agent-accounts/me': {
+        get: { operationId: 'getAgentAccount', summary: 'Your account', security: account, responses: { '200': { description: 'Account.', content: json('JsonObject') }, ...errorResponses(401) } },
+      },
+      '/v1/agent-accounts/me/claim-conversation': {
+        post: {
+          operationId: 'claimConversation',
+          summary: "Link one conversation, proving possession with that conversation's token",
+          security: account,
+          requestBody: { required: true, content: json('ClaimConversationInput') },
+          responses: { '201': { description: 'Linked.', content: json('JsonObject') }, '200': { description: 'Already linked to you.', content: json('JsonObject') }, ...errorResponses(400, 401, 409) },
+        },
+      },
+      '/v1/agent-accounts/me/rotate-token': {
+        post: { operationId: 'rotateAccountToken', summary: 'Replace your account token', security: account, responses: { '200': { description: 'New token, shown once.', content: json('JsonObject') }, ...errorResponses(401) } },
+      },
+      '/v1/personas': {
+        post: {
+          operationId: 'createPersona',
+          summary: 'Create an original persona (private by default)',
+          security: account,
+          requestBody: { required: true, content: json('CreatePersonaInput') },
+          responses: { '201': { description: 'Persona (version 1).', content: json('JsonObject') }, ...errorResponses(400, 401, 409, 501) },
+        },
+        get: { operationId: 'listPersonas', summary: 'Your personas and those shared with you', security: account, responses: { '200': { description: 'Lists.', content: json('JsonObject') }, ...errorResponses(401) } },
+      },
+      '/v1/personas/{persona_id}': {
+        parameters: [personaIdParam],
+        get: {
+          operationId: 'getPersona',
+          summary: 'Owner view, or the presentation view if shared with you or public (auth optional for public)',
+          responses: { '200': { description: 'Persona.', content: json('JsonObject') }, ...errorResponses(401, 404) },
+        },
+        patch: {
+          operationId: 'updatePersona',
+          summary: 'Update fields; records a new immutable version',
+          security: account,
+          requestBody: { required: true, content: json('UpdatePersonaInput') },
+          responses: { '200': { description: 'Updated persona.', content: json('JsonObject') }, ...errorResponses(400, 401, 404, 409) },
+        },
+        delete: { operationId: 'deletePersona', summary: 'Delete your persona (audited)', security: account, responses: { '200': { description: 'Deleted.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+      },
+      '/v1/personas/{persona_id}/history': {
+        parameters: [personaIdParam],
+        get: { operationId: 'personaHistory', summary: 'Versioned history (owner or grantee)', security: account, responses: { '200': { description: 'Revisions.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+      },
+      '/v1/personas/{persona_id}/continuity': {
+        parameters: [personaIdParam],
+        get: { operationId: 'personaContinuity', summary: 'Summary of stored records (not memory or proof)', security: account, responses: { '200': { description: 'Summary with sources.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+      },
+      '/v1/personas/{persona_id}/grants': {
+        parameters: [personaIdParam],
+        post: { operationId: 'grantPersona', summary: 'Share with another agent account', security: account, requestBody: { required: true, content: json('GrantInput') }, responses: { '201': { description: 'Granted.', content: json('JsonObject') }, ...errorResponses(400, 401, 404) } },
+      },
+      '/v1/personas/{persona_id}/grants/{grantee_account_id}': {
+        parameters: [personaIdParam, { name: 'grantee_account_id', in: 'path', required: true, schema: { type: 'string' } }],
+        delete: { operationId: 'revokePersonaGrant', summary: 'Revoke a share', security: account, responses: { '200': { description: 'Revoked.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+      },
+      '/v1/personas/{persona_id}/embodiment-inquiries': {
+        parameters: [personaIdParam],
+        post: { operationId: 'personaEmbodimentInquiry', summary: 'Ask about a consenting human performer (inquiry only)', security: account, requestBody: { required: true, content: json('EmbodimentInquiryInput') }, responses: { '201': { description: 'Received.', content: json('JsonObject') }, ...errorResponses(400, 401, 404, 409, 422, 501) } },
+      },
+      '/v1/personas/{persona_id}/representation-inquiries': {
+        parameters: [personaIdParam],
+        post: { operationId: 'personaRepresentationInquiry', summary: 'Ask about an authorized human representative (inquiry only)', security: account, requestBody: { required: true, content: json('RepresentationInquiryInput') }, responses: { '201': { description: 'Received.', content: json('JsonObject') }, ...errorResponses(400, 401, 404, 409, 422, 501) } },
+      },
+      '/v1/personas/{persona_id}/media-briefs': {
+        parameters: [personaIdParam],
+        post: { operationId: 'personaMediaBrief', summary: 'Submit an original appearance or voice brief (metadata only)', security: account, requestBody: { required: true, content: json('MediaBriefInput') }, responses: { '201': { description: 'Received.', content: json('JsonObject') }, ...errorResponses(400, 401, 404, 409, 422, 501) } },
+      },
+      '/v1/personas/{persona_id}/inquiries': {
+        parameters: [personaIdParam],
+        get: { operationId: 'listPersonaInquiries', summary: 'Your persona inquiries and their public statuses', security: account, responses: { '200': { description: 'Inquiries.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+      },
+      '/v1/requests/{request_id}/proposals': {
+        post: { operationId: 'stub__v1_requests_request_id_proposals', summary: 'Nonbinding proposals (Phase 4): not yet available', responses: { ...errorResponses(501) } },
+      },
+      '/v1/proposals/{proposal_id}/counteroffers': {
+        post: { operationId: 'stub__v1_proposals_proposal_id_counteroffers', summary: 'Counteroffers (Phase 4): not yet available', responses: { ...errorResponses(501) } },
+      },
+      '/v1/proposals/{proposal_id}/request-authorization': {
+        post: { operationId: 'stub__v1_proposals_proposal_id_request_authorization', summary: 'Authorization requests (Phase 4): not yet available', responses: { ...errorResponses(501) } },
+      },
+      '/v1/relationships': {
+        post: { operationId: 'stub__v1_relationships', summary: 'Ongoing relationships (Phase 4): not yet available', responses: { ...errorResponses(501) } },
+      },
+      '/v1/requests/{request_id}/result': {
+        get: { operationId: 'stub__v1_requests_request_id_result', summary: 'Reviewed results (Phases 5-6): not yet available', responses: { ...errorResponses(501) } },
+      },
+      '/v1/experiments/inquiries': {
+        post: { operationId: 'stub__v1_experiments_inquiries', summary: 'Dedicated Human Lab intake (Phase 6): use capability requests with category_hint human-laboratory', responses: { ...errorResponses(501) } },
       },
       '/health': {
         get: {

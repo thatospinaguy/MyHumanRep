@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type ConversationDetail } from '../api';
+import { SelfReports } from './Embassy';
 import { Badge, ErrorBox, Link, Loading, Notice, SafeText, Time, Unverified, label, navigate, useAction, useLoad } from '../ui';
 
 const INTENTS = ['general_inquiry', 'capability_request', 'research_question', 'other'];
@@ -107,6 +108,21 @@ export function Conversation({ id }: { id: string }) {
             </form>
           </section>
 
+          {data.embassy_inquiries.length > 0 && (
+            <section className="panel">
+              <h2>Human Embassy inquiries ({data.embassy_inquiries.length})</h2>
+              <ul className="plain">
+                {data.embassy_inquiries.map((e) => (
+                  <li key={e.id}>
+                    <Link to={`/admin/embassy/${e.id}`}>
+                      <Badge value={e.status} /> <Time iso={e.created_at} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="panel">
             <h2>Capability requests ({data.requests.length})</h2>
             {data.requests.length === 0 ? (
@@ -139,7 +155,7 @@ export function Conversation({ id }: { id: string }) {
               </dd>
               <dt>Claimed autonomy</dt>
               <dd>
-                {label(c.claimed_autonomy)} <Unverified />
+                {label(c.autonomy_claim ?? c.claimed_autonomy)} <Unverified />
               </dd>
               <dt>Language</dt>
               <dd>{c.language ?? <span className="muted">none</span>}</dd>
@@ -162,6 +178,11 @@ export function Conversation({ id }: { id: string }) {
                 <code>{c.id}</code>
               </dd>
             </dl>
+          </section>
+
+          <section className="panel">
+            <h2>Claims and evidence</h2>
+            <SelfReports reports={data.self_reports} onChanged={reload} />
           </section>
 
           <section className="panel">

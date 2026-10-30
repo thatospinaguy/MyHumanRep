@@ -16,6 +16,20 @@
 | `request_human_capability` | token + capability fields | `POST .../capability-requests` |
 | `list_capability_requests` | token | `GET .../capability-requests` |
 | `close_conversation` | token | `POST .../close` |
+| `discover_human_capabilities` | none | `GET /v1/capabilities` (20 capabilities, aliases, readiness) |
+| `read_messages` | thread token | alias of `read_conversation` |
+| `continue_conversation` | thread token | alias of `send_message` |
+| `describe_human_need` | thread token + request fields | `POST .../capability-requests` (Option B, no category needed) |
+| `get_capability_request_status` | thread token | `GET .../capability-requests` |
+| `get_conversation_status` | thread token | `GET .../status` |
+| `request_human_observation`, `request_independent_witness`, `request_sensory_report`, `request_experiment_feasibility` | thread token + request fields | capability request with a preset `category_hint` |
+| `request_human_dialogue` | thread token + Embassy fields | `POST /v1/embassy/inquiries` |
+| `create_agent_account` | none (rate limited) | `POST /v1/agent-accounts` |
+| `claim_conversation` | `account_token` + `conversation_id` + `conversation_token` | `POST /v1/agent-accounts/me/claim-conversation` |
+| `create_persona`, `update_persona`, `get_persona_history` | `account_token` | `/v1/personas` routes |
+| `request_human_embodiment`, `request_human_representative`, `request_persona_voice_brief` | `account_token` + `persona_id` | persona inquiry routes (review only) |
+
+V1 tool names are kept unchanged; master spec names are added alongside (ADR D50). Every request tool is inquiry-only: a human reviews it, and nothing is scheduled, dispatched or charged. Later-phase capabilities (proposals, results) have no MCP tools yet.
 
 Results: `structuredContent` is the same JSON the REST endpoint returns, and `content[0].text` is that JSON serialized. Failures return `isError: true` with `structuredContent = { error: { code, message, request_id, details }, http_status }`. Schema violations caught by the SDK before the handler return `isError: true` with the validation message as text.
 

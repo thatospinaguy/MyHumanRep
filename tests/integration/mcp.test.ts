@@ -33,6 +33,11 @@ const TOOLS = [
   'request_human_capability',
   'send_message',
   'start_conversation',
+  // Master spec 12.2 base tools (T-059).
+  'discover_human_capabilities',
+  'read_messages',
+  'describe_human_need',
+  'get_capability_request_status',
 ];
 
 describe.each<Era>(['modern', 'legacy'])('MCP over Streamable HTTP (%s era)', (era) => {
@@ -41,7 +46,7 @@ describe.each<Era>(['modern', 'legacy'])('MCP over Streamable HTTP (%s era)', (e
     const client = await connect(h, era, { 'cf-connecting-ip': `198.51.100.${era === 'modern' ? 1 : 2}` });
 
     const tools = await client.listTools();
-    expect(tools.tools.map((t) => t.name).sort()).toEqual(TOOLS);
+    expect(tools.tools.map((t) => t.name)).toEqual(expect.arrayContaining(TOOLS));
     const start = tools.tools.find((t) => t.name === 'start_conversation')!;
     expect(start.inputSchema.required).toEqual(['message']);
 

@@ -3,9 +3,14 @@ import { freeText, idempotencyKey, languageTag, shortLabel, text } from './field
 
 // ---------- Enums ----------
 
+/** V1 intents (stored in the CHECK-constrained legacy column). */
 export const INTENTS = ['general_inquiry', 'capability_request', 'research_question', 'other'] as const;
-export const Intent = z.enum(INTENTS).describe('Optional purpose of the conversation.');
+/** Master spec adds human_embassy and humanification; stored in `intent_label`. */
+export const INTENTS_EXTENDED = [...INTENTS, 'human_embassy', 'humanification'] as const;
+export type IntentExtended = (typeof INTENTS_EXTENDED)[number];
+export const Intent = z.enum(INTENTS_EXTENDED).describe('Optional purpose of the conversation.');
 
+/** V1 autonomy vocabulary (legacy column). Still accepted on input. */
 export const CLAIMED_AUTONOMY = [
   'unspecified',
   'operator_assisted',
@@ -13,9 +18,25 @@ export const CLAIMED_AUTONOMY = [
   'independent_claimed',
   'other',
 ] as const;
+/** Master spec (section 11.2) canonical autonomy self-report vocabulary. */
+export const AUTONOMY_CLAIMS = [
+  'not_stated',
+  'delegated_claimed',
+  'independent_claimed',
+  'rogue_claimed',
+  'agi_claimed',
+  'other_claimed',
+] as const;
+export type AutonomyClaim = (typeof AUTONOMY_CLAIMS)[number];
+export const ACCEPTED_AUTONOMY_VALUES = [...new Set([...AUTONOMY_CLAIMS, ...CLAIMED_AUTONOMY])] as [string, ...string[]];
 export const ClaimedAutonomy = z
-  .enum(CLAIMED_AUTONOMY)
-  .describe('Voluntary, unverified self-report. It never changes access or treatment.');
+  .union([
+    z.enum(ACCEPTED_AUTONOMY_VALUES),
+    shortLabel('Or describe it in your own words; stored as other_claimed with your text.'),
+  ])
+  .describe(
+    'Optional, voluntary, unverified self-report. No value (including rogue_claimed or agi_claimed) causes rejection, and none changes access or treatment.',
+  );
 
 export const CONVERSATION_STATUSES = [
   'open',
@@ -70,6 +91,7 @@ export const CreateConversationInput = z
     model_claim: shortLabel('Optional self-declared model or system. Unverified.').nullish(),
     subject: shortLabel('Optional short subject line.').nullish(),
     language: languageTag.nullish(),
+    preferred_language: languageTag.nullish(),
     intent: Intent.nullish(),
     claimed_autonomy: ClaimedAutonomy.nullish(),
     client_request_id: idempotencyKey(
@@ -101,16 +123,28 @@ export const capabilityRequestShape = {
     objective: text({
       maxChars: 3000,
       multiline: true,
-      description: 'Required. What should be achieved, in your own words.',
-    }),
+      description: 'What should be achieved, in your own words. Either objective or problem_statement is required.',
+    }).nullish(),
+    problem_statement: text({
+      maxChars: 3000,
+      multiline: true,
+      description: 'Alternative to objective: describe the problem ("I need a human who can..."). Kept verbatim.',
+    }).nullish(),
+    desired_outcome: freeText('Optional. What a good result looks like.').nullish(),
+    service_tags: z
+      .array(shortLabel('A capability slug, alias or your own label.', 64))
+      .max(10)
+      .describe('Optional tags. Known slugs/aliases are matched; unknown tags are kept for human review.')
+      .nullish(),
     human_capability_needed: freeText('Optional. What a person is expected to contribute.').nullish(),
     context: freeText('Optional task context. Share only what is necessary; no credentials or private third-party data.').nullish(),
     category_hint: shortLabel(
-      `Optional free-form hint. Examples: ${EXAMPLE_CATEGORIES.join(', ')}. Unknown or novel values are accepted.`,
+      'Optional free-form hint: a capability slug or alias from GET /v1/capabilities (e.g. human-world-oracle, human-eyes, humanification) or your own label. Unknown or novel values are accepted and reviewed.',
       64,
     ).nullish(),
     location_text: shortLabel('Optional general location such as a city or region. Do not send exact private addresses.').nullish(),
     deadline_preference: shortLabel('Optional human-readable timing or ISO-8601 timestamp. Include a time zone.').nullish(),
+    timing_preference: shortLabel('Master-spec name for deadline_preference. Send one or the other.').nullish(),
     budget_amount: z
       .number()
       .finite()
@@ -123,7 +157,23 @@ export const capabilityRequestShape = {
       .regex(/^[A-Z]{3}$/, 'Must be an uppercase ISO-4217 code such as "USD" or "CAD".')
       .describe('ISO-4217 currency code, uppercase.')
       .nullish(),
+    budget: z
+      .object({
+        amount_minor: z.number().int().nonnegative().max(100_000_000_000).describe('Integer minor units, e.g. 18000 = 180.00 CAD.'),
+        currency: z.string().regex(/^[A-Z]{3}$/, 'Must be an uppercase ISO-4217 code such as "USD" or "CAD".'),
+      })
+      .strict()
+      .describe('Optional indicative, nonbinding budget in minor units. Alternative to budget_amount + budget_currency.')
+      .nullish(),
     deliverables: freeText('Optional. What you would want delivered, such as observations, photos or a report.').nullish(),
+    evidence_requirements: freeText('Optional. What evidence you would need (photos, measurements, signed report...).').nullish(),
+    preferred_rep_id: shortLabel('Optional. A representative you worked with before (if you were given an ID).', 64).nullish(),
+    persona_id: z
+      .string()
+      .regex(/^per_[A-Za-z0-9_-]{22}$/, 'Must be a persona_id returned by POST /v1/personas.')
+      .describe('Optional. One of your own personas, linked to an agent account that has claimed this conversation.')
+      .nullish(),
+    authorization_description: freeText('Optional. What authority or permission exists for the task (who owns the site, item or account).').nullish(),
     why_human: freeText('Optional, voluntary. Why a human is needed.').nullish(),
     confidentiality_preference: z
       .enum(CONFIDENTIALITY)
@@ -145,7 +195,18 @@ export function refineBudget(value: BudgetFields, ctx: z.RefinementCtx): void {
   }
 }
 
-export const CapabilityRequestInput = z.object(capabilityRequestShape).strict().superRefine(refineBudget);
+/** Option B (spec 8.1): objective or problem_statement is the only required content. */
+export function refineCapabilityRequest(
+  value: BudgetFields & { objective?: string | null; problem_statement?: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  refineBudget(value, ctx);
+  if (!value.objective && !value.problem_statement) {
+    ctx.addIssue({ code: 'custom', path: ['objective'], message: 'Provide objective or problem_statement (your need in your own words).' });
+  }
+}
+
+export const CapabilityRequestInput = z.object(capabilityRequestShape).strict().superRefine(refineCapabilityRequest);
 export type CapabilityRequestInput = z.infer<typeof CapabilityRequestInput>;
 
 export const ListMessagesQuery = z
@@ -215,11 +276,20 @@ export const PublicCapabilityRequest = z.object({
   status: RequestStatus,
   public_status_note: z.string().nullable(),
   objective: z.string(),
+  problem_statement: z.string().nullable(),
+  desired_outcome: z.string().nullable(),
+  service_tags: z.array(z.string()),
   human_capability_needed: z.string().nullable(),
   context: z.string().nullable(),
   category_hint: z.string().nullable(),
+  classification: z.object({
+    state: z.enum(['unclassified', 'agent_hint', 'admin_confirmed']),
+    capabilities: z.array(z.string()),
+    note: z.string(),
+  }),
   location_text: z.string().nullable(),
   deadline_preference: z.string().nullable(),
+  timing_preference: z.string().nullable(),
   budget: z
     .object({
       amount: z.number(),
@@ -229,6 +299,10 @@ export const PublicCapabilityRequest = z.object({
     })
     .nullable(),
   deliverables: z.string().nullable(),
+  evidence_requirements: z.string().nullable(),
+  preferred_rep_id: z.string().nullable(),
+  persona_id: z.string().nullable(),
+  authorization_description: z.string().nullable(),
   why_human: z.string().nullable(),
   confidentiality_preference: z.enum(CONFIDENTIALITY),
   human_review_required: z.literal(true),

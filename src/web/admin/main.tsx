@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { api, type Session } from './api';
 import { Audit } from './pages/Audit';
 import { Conversation } from './pages/Conversation';
+import { Embassy, EmbassyDetailPage } from './pages/Embassy';
+import { PersonaDetailPage, Personas } from './pages/Personas';
+import { RegistryPage } from './pages/Registry';
 import { Inbox } from './pages/Inbox';
 import { Overview } from './pages/Overview';
 import { RequestDetail } from './pages/RequestDetail';
@@ -15,6 +18,9 @@ const NAV: Array<[string, string]> = [
   ['/admin/', 'Overview'],
   ['/admin/inbox', 'Inbox'],
   ['/admin/requests', 'Requests'],
+  ['/admin/embassy', 'Embassy'],
+  ['/admin/personas', 'Personas'],
+  ['/admin/registry', 'Registry'],
   ['/admin/settings', 'Settings'],
   ['/admin/audit', 'Audit'],
 ];
@@ -28,6 +34,11 @@ function Route({ path, onSettingsChanged }: { path: string; onSettingsChanged: (
   if ((m = /^\/admin\/requests\/([A-Za-z0-9_-]+)$/.exec(path))) return <RequestDetail key={m[1]} id={m[1]!} />;
   if (path === '/admin/settings') return <Settings onChanged={onSettingsChanged} />;
   if (path === '/admin/audit') return <Audit />;
+  if (path === '/admin/embassy') return <Embassy />;
+  if ((m = /^\/admin\/embassy\/([A-Za-z0-9_-]+)$/.exec(path))) return <EmbassyDetailPage key={m[1]} id={m[1]!} />;
+  if (path === '/admin/personas') return <Personas />;
+  if ((m = /^\/admin\/personas\/([A-Za-z0-9_-]+)$/.exec(path))) return <PersonaDetailPage key={m[1]} id={m[1]!} />;
+  if (path === '/admin/registry') return <RegistryPage />;
   return <p>Page not found.</p>;
 }
 

@@ -21,8 +21,18 @@ import { parseInput } from '../services/context';
 import { getMetrics, metricsToCsvRows } from '../services/metrics';
 import { getSettings, SettingsPatchSchema, settingsUpsertStatements } from '../services/settings';
 import { MetricsQuery } from '../schemas/admin';
+import { getEmbassyInquiry, listEmbassy, patchEmbassyInquiry, patchSelfReport, researchSummary } from '../services/admin-embassy';
+import {
+  deletePersonaAdmin,
+  getPersonaAdmin,
+  listPersonaInquiriesAdmin,
+  listPersonasAdmin,
+  patchPersonaInquiry,
+} from '../services/admin-humanification';
+import { decideCandidate, listCandidates, listRegistryAdmin, patchCapability } from '../services/admin-registry';
+import { FeatureFlagsPatch, flagsUpsertStatement, getFeatureFlags, moduleReadiness, type FeatureFlags } from '../services/feature-flags';
 import { readJsonBody } from '../utils/body';
-import { ApiError } from '../utils/http-errors';
+import { ApiError, errors } from '../utils/http-errors';
 
 const ADMIN_BODY_MAX = 32 * 1024;
 
@@ -120,6 +130,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
     const config = c.get('config');
     return c.json({
       settings: await getSettings(c.env.MHR_DB, config),
+      feature_flags: moduleReadiness(await getFeatureFlags(c.env.MHR_DB)),
       read_only: {
         environment: config.environment,
         public_base_url: config.baseUrl,
@@ -132,11 +143,22 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   });
   app.patch('/admin/api/settings', async (c) => {
     const ctx = adminCtx(c);
-    const patch = parseInput(SettingsPatchSchema, await body(c));
+    const raw = await body(c);
+    const { feature_flags: rawFlags, ...rest } = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const patch = parseInput(SettingsPatchSchema, rest);
+    const flagPatch = rawFlags === undefined ? {} : parseInput(FeatureFlagsPatch, rawFlags);
     const keys = Object.keys(patch);
-    if (keys.length === 0) throw new ApiError('invalid_request', 'Provide at least one setting.', { reason: 'empty_patch' });
+    const flagKeys = Object.keys(flagPatch);
+    if (keys.length === 0 && flagKeys.length === 0) {
+      throw new ApiError('invalid_request', 'Provide at least one setting.', { reason: 'empty_patch' });
+    }
+    const statements = settingsUpsertStatements(ctx.db, patch, ctx.actor, ctx.now);
+    if (flagKeys.length > 0) {
+      const flags = { ...(await getFeatureFlags(ctx.db)), ...flagPatch } as FeatureFlags;
+      statements.push(flagsUpsertStatement(ctx.db, flags, ctx.actor, ctx.now));
+    }
     await ctx.db.batch([
-      ...settingsUpsertStatements(ctx.db, patch, ctx.actor, ctx.now),
+      ...statements,
       auditStatement(
         ctx.db,
         ctx.actor,
@@ -144,14 +166,52 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
         'settings',
         null,
         {
-          changed: keys,
+          changed: [...keys, ...flagKeys.map((k) => `feature_flags.${k}`)],
           ...(patch.intake_enabled !== undefined ? { intake_enabled: patch.intake_enabled } : {}),
           ...(patch.notifications_enabled !== undefined ? { notifications_enabled: patch.notifications_enabled } : {}),
         },
         ctx.now,
       ),
     ]);
-    return c.json({ settings: await getSettings(ctx.db, ctx.config) });
+    return c.json({
+      settings: await getSettings(ctx.db, ctx.config),
+      feature_flags: moduleReadiness(await getFeatureFlags(ctx.db)),
+    });
+  });
+
+  // Capability registry (master spec Phase 1).
+  app.get('/admin/api/capabilities', async (c) => c.json(await listRegistryAdmin(adminCtx(c))));
+  app.patch('/admin/api/capabilities/:slug', async (c) =>
+    c.json({ capability: await patchCapability(adminCtx(c), c.req.param('slug'), await body(c)) }),
+  );
+  app.get('/admin/api/candidate-capabilities', async (c) => c.json(await listCandidates(adminCtx(c), c.req.query('status'))));
+  app.post('/admin/api/candidate-capabilities/:id/decision', async (c) =>
+    c.json(await decideCandidate(adminCtx(c), c.req.param('id'), await body(c))),
+  );
+
+  // Humanification (master spec Phase 2). The owner reviews; persona content stays agent-owned.
+  app.get('/admin/api/personas', async (c) => c.json(await listPersonasAdmin(adminCtx(c), c.req.query('visibility'))));
+  app.get('/admin/api/personas/:id', async (c) => c.json(await getPersonaAdmin(adminCtx(c), c.req.param('id'))));
+  app.delete('/admin/api/personas/:id', async (c) => c.json(await deletePersonaAdmin(adminCtx(c), c.req.param('id'), await body(c))));
+  app.get('/admin/api/persona-inquiries', async (c) => c.json(await listPersonaInquiriesAdmin(adminCtx(c), c.req.query('status'))));
+  app.patch('/admin/api/persona-inquiries/:id', async (c) => c.json({ inquiry: await patchPersonaInquiry(adminCtx(c), c.req.param('id'), await body(c)) }));
+
+  // Human Embassy (master spec Phase 3): separate from commercial requests.
+  app.get('/admin/api/embassy', async (c) => c.json(await listEmbassy(adminCtx(c), c.req.query('status'))));
+  app.get('/admin/api/embassy/:id', async (c) => c.json(await getEmbassyInquiry(adminCtx(c), c.req.param('id'))));
+  app.patch('/admin/api/embassy/:id', async (c) => c.json({ inquiry: await patchEmbassyInquiry(adminCtx(c), c.req.param('id'), await body(c)) }));
+  app.patch('/admin/api/self-reports/:id', async (c) => c.json(await patchSelfReport(adminCtx(c), c.req.param('id'), await body(c))));
+  app.get('/admin/api/research/summary', async (c) => c.json(await researchSummary(adminCtx(c))));
+
+  // Later-phase admin modules: typed, never fake success.
+  app.all('/admin/api/representatives', () => {
+    throw errors.notYetAvailable('Human representative network (Phase 5)');
+  });
+  app.all('/admin/api/representatives/:id', () => {
+    throw errors.notYetAvailable('Human representative network (Phase 5)');
+  });
+  app.all('/admin/api/proposals', () => {
+    throw errors.notYetAvailable('Proposal queue (Phase 4)');
   });
 
   app.all('/admin/api/*', () => {

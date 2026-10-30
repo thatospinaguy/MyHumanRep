@@ -1,6 +1,6 @@
 # Decisions log
 
-Each entry: decision, why, and whether it deviates from `docs/myhumanrep-claude-code-build-v2.md`.
+Each entry: decision, why, and whether it deviates from the spec. D0-D38 were made against the original V1/V1.5 build spec (now `docs/archive/myhumanrep-claude-code-build-v2.md`). D39 onward are made against the master spec v4.0 (`docs/specs/MYHUMANREP_MASTER_SPEC.md`), which wins where they conflict.
 
 ## Starting point
 
@@ -67,3 +67,19 @@ Each entry: decision, why, and whether it deviates from `docs/myhumanrep-claude-
 - **D36.** Human-visitor contact form (spec: optional).
 - **D37.** "Allowed categories" admin setting: categories are free-form hints by design and never restricted.
 - **D38.** `mcp-publisher` validation: the binary could not be downloaded here (GitHub API returned 403 through the sandbox proxy). `registry/server.json` is validated with Ajv against the official vendored schema (`registry/server.schema.2025-12-11.json`). Run `mcp-publisher` before publishing.
+
+## Master spec v4.0 reconciliation
+
+- **D39. Additive migrations only for parent tables.** D1 executes `DROP TABLE` with foreign keys enforced, so rebuilding `conversations` or `capability_requests` would cascade-delete messages or null out request links. New master fields are added as columns (`autonomy_claim`, `intent_label`, `classification_state`, ...). Only the leaf table `notification_outbox` was rebuilt, with a verbatim copy and a fixture test (T-071).
+- **D40. Vocabulary mapping instead of renaming.** V1 `claimed_autonomy` values and intents keep working; master values (`rogue_claimed`, `agi_claimed`, `human_embassy`, ...) and free text are accepted too. `normalizeAutonomy` stores the master claim in `autonomy_claim` and keeps the closest V1 value in the legacy column so V1 filters and metrics stay valid.
+- **D41. Claims are rows, not flags.** Every self-report (autonomy, model, origin) is an `agent_self_reports` row with `evidence_status` defaulting to `self_reported_unverified`. Owners can change evidence status; that never changes access, limits or routing.
+- **D42. V1 request statuses kept.** The master status names differ, but changing the CHECK would need the rebuild ruled out in D39. Mapping is documented in REQUIREMENTS_RECONCILIATION. Deferred to Phase 4 with a new column.
+- **D43. Idempotency hash compatibility.** New capability-request fields join the payload hash only when non-null, so a V1 client replaying a V1 payload gets the same hash and a `200` replay, not a `409`.
+- **D44. Registry generated from code.** `src/worker/catalog/capabilities.ts` is the single source; `npm run gen:capabilities` writes migration `0004`. After `0004` reaches a remote DB, changes go in new migrations. The Worker falls back to the static catalog if the table is empty.
+- **D45. Account credentials separate from thread credentials.** `mhra_` account tokens and `mhr_` thread tokens use different HMAC purposes and cannot be swapped. Linking a thread requires both tokens. An account never gains access to a thread it did not prove.
+- **D46. Persona visibility is presentation, not authentication.** `public`/`shared` controls which fields others see; writes always require the owner's account token. Grants are explicit and revocable.
+- **D47. Embassy inquiries ride on ordinary messages.** The inquiry text is stored as an agent message (`client_message_id = embassy:<client_request_id>`), so the human reply, polling, MCP and admin threads work unchanged.
+- **D48. Server-side feature flags with locked modules.** Flags live in the `settings` table. Flags for modules with no code are `implemented: false`: the admin API refuses to enable them (`400 invalid_request`), and their routes return `501 not_yet_available`. Payments additionally need written owner approval.
+- **D49. Later-phase routes exist as typed 501s.** Agents reading the spec can call proposal, project, result and Human Lab routes and get an honest machine-readable answer with a hint, instead of a 404 or fake success.
+- **D50. MCP tool names are additive.** V1 tools (`read_conversation`, `request_human_capability`, ...) stay; master names (`read_messages`, `describe_human_need`, `continue_conversation`, ...) are added as aliases over the same services.
+

@@ -100,6 +100,7 @@ export interface ConversationSummary {
   sender_label: string | null;
   model_claim: string | null;
   claimed_autonomy: string;
+  autonomy_claim: string | null;
   claims_verified: false;
   intent: string;
   status: string;
@@ -168,6 +169,8 @@ export interface ConversationDetail {
   messages: AdminMessage[];
   requests: AdminRequest[];
   notifications: Array<{ event_type: string; status: string; attempts: number; last_error_code: string | null; created_at: string }>;
+  self_reports: Array<{ id: string; claim_type: string; claim_value: string | null; claim_text: string | null; evidence_status: string; source: string; created_at: string }>;
+  embassy_inquiries: Array<{ id: string; status: string; created_at: string }>;
   work_scheduled: false;
 }
 

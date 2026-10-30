@@ -5,6 +5,7 @@ import { applySecurityHeaders } from './middleware/security-headers';
 import { NotFoundPage } from './pages/pages';
 import { registerAdminRoutes } from './routes/admin';
 import { registerConversationRoutes } from './routes/conversations';
+import { registerHumanificationRoutes } from './routes/humanification';
 import { registerMcpRoutes } from './routes/mcp';
 import { registerPublicRoutes } from './routes/public';
 import { newId } from './utils/crypto';
@@ -12,14 +13,21 @@ import { ApiError, errorBody } from './utils/http-errors';
 
 /** Paths whose query strings may contain private data and must not survive a redirect. */
 function isPrivatePath(path: string): boolean {
-  return path.startsWith('/admin') || path.startsWith('/v1/conversations') || path.startsWith('/mcp');
+  return (
+    path.startsWith('/admin') ||
+    path.startsWith('/v1/conversations') ||
+    path.startsWith('/v1/agent-accounts') ||
+    path.startsWith('/v1/personas') ||
+    path.startsWith('/v1/embassy') ||
+    path.startsWith('/mcp')
+  );
 }
 
 function redactPath(path: string): string {
-  return path.replace(/\/(conv|cap|msg)_[A-Za-z0-9_-]+/g, '/$1_{id}').slice(0, 200);
+  return path.replace(/\/(conv|cap|msg|per|acct|pinq|emb)_[A-Za-z0-9_-]+/g, '/$1_{id}').slice(0, 200);
 }
 
-const CORS_PATHS = /^\/(v1\/|openapi\.json$|health$|llms\.txt$)/;
+const CORS_PATHS = /^\/(v1\/|openapi\.json$|health$|llms\.txt$|\.well-known\/myhumanrep\.json$)/;
 
 export function createApp(deps: AppDeps = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -68,7 +76,7 @@ export function createApp(deps: AppDeps = {}): Hono<AppEnv> {
       // Bearer tokens are never ambient (no cookies), so cross-origin agent clients are allowed.
       res.headers.set('Access-Control-Allow-Origin', '*');
       res.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-      res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
       res.headers.set('Access-Control-Expose-Headers', 'Retry-After, X-Request-Id');
       res.headers.set('Access-Control-Max-Age', '600');
     }
@@ -91,6 +99,7 @@ export function createApp(deps: AppDeps = {}): Hono<AppEnv> {
 
   registerPublicRoutes(app, deps);
   registerConversationRoutes(app, deps);
+  registerHumanificationRoutes(app, deps);
   registerMcpRoutes(app, deps);
   registerAdminRoutes(app, deps);
 

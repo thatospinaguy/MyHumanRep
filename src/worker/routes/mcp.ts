@@ -3,8 +3,9 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { buildServiceContext, type AppContext, type AppDeps, type AppEnv } from '../app-types';
-import { buildCapabilities, FOR_AGENTS_NOTICE, NO_WORK_NOTICE, PRIVACY_NOTICE } from '../content';
-import { AddMessageInput, capabilityRequestShape, CreateConversationInput, refineBudget } from '../schemas/api';
+import { FOR_AGENTS_NOTICE, NO_WORK_NOTICE, PRIVACY_NOTICE } from '../content';
+import { capabilitiesDocument } from '../services/discovery';
+import { AddMessageInput, capabilityRequestShape, CreateConversationInput, refineCapabilityRequest } from '../schemas/api';
 import { enforceEdgeLimit, enforceQuota } from '../services/abuse';
 import { createCapabilityRequest, listCapabilityRequests } from '../services/capability-requests';
 import type { ServiceContext } from '../services/context';
@@ -15,8 +16,11 @@ import {
   createConversation,
   listMessages,
 } from '../services/conversations';
-import { getSettings } from '../services/settings';
 import { ApiError, errorBody } from '../utils/http-errors';
+import { ClaimConversationInput, CreateAgentAccountInput, CreatePersonaInput, EmbodimentInquiryInput, MediaBriefInput, RepresentationInquiryInput } from '../schemas/humanification';
+import { authenticateAccount, claimConversation, createAgentAccount } from '../services/agent-accounts';
+import { conversationStatus, createEmbassyInquiry, EmbassyInquiryInput } from '../services/embassy';
+import { createPersona, createPersonaInquiry, personaHistory, updatePersona } from '../services/personas';
 import { MINUTE } from '../utils/time';
 
 export const SERVER_VERSION = '2.0.0';
@@ -27,6 +31,7 @@ const INSTRUCTIONS = [
   PRIVACY_NOTICE,
   NO_WORK_NOTICE,
   'Flow: start_conversation once and store conversation_id and conversation_token (shown once, not recoverable).',
+  'discover_human_capabilities lists all 20 human capabilities; describe_human_need accepts anything in your own words; request_human_dialogue opens a Human Embassy dialogue; create_agent_account + create_persona give you an original persona.',
   'Then use read_conversation no more than once per minute to retrieve replies, send_message to continue, and request_human_capability for open-ended requests.',
   'Tool arguments, including conversation_token, may be visible in your client or model provider traces. The REST API accepts the token in an Authorization header instead.',
 ].join('\n\n');
@@ -83,8 +88,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     },
     () =>
       run(ctx, async () => {
-        const settings = await getSettings(ctx.db, ctx.config);
-        return buildCapabilities(ctx.config, settings.intake_enabled, settings.conversation_ttl_days);
+        return capabilitiesDocument(ctx.db, ctx.config);
       }),
   );
 
@@ -152,7 +156,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
       inputSchema: z
         .object({ ...authShape, ...capabilityRequestShape })
         .strict()
-        .superRefine(refineBudget),
+        .superRefine(refineCapabilityRequest),
       annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
     },
     (args) =>
@@ -194,6 +198,261 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
         return closeConversation(ctx, conv);
       }),
   );
+
+  // ---------- Master spec 12.2 base tool names (same services; V1 names above stay for existing clients) ----------
+
+  server.registerTool(
+    'discover_human_capabilities',
+    {
+      title: 'Discover human capabilities',
+      description:
+        'Lists all human capabilities you can inquire about (20 canonical services plus aliases), with truthful readiness: inquiry_available vs fulfillment_available. No credentials needed. Unlisted needs are welcome too.',
+      inputSchema: z.object({}).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    () => run(ctx, () => capabilitiesDocument(ctx.db, ctx.config)),
+  );
+
+  server.registerTool(
+    'read_messages',
+    {
+      title: 'Read messages',
+      description: 'Same as read_conversation: messages and status for your own conversation, with cursor pagination.',
+      inputSchema: z
+        .object({
+          ...authShape,
+          after: z.string().max(64).optional().describe('next_cursor from a previous read.'),
+          limit: z.number().int().min(1).max(100).optional().describe('Page size, default 50.'),
+        })
+        .strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return listMessages(ctx, conv, {
+          ...(rest.after !== undefined ? { after: rest.after } : {}),
+          ...(rest.limit !== undefined ? { limit: rest.limit } : {}),
+        });
+      }),
+  );
+
+  server.registerTool(
+    'describe_human_need',
+    {
+      title: 'Describe a human need',
+      description:
+        'Describe anything you need a human for, in your own words (objective or problem_statement). No category required; unfamiliar needs are kept verbatim and reviewed by a person. Nothing is booked or paid.',
+      inputSchema: z.object({ ...authShape, ...capabilityRequestShape }).strict().superRefine(refineCapabilityRequest),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return (await createCapabilityRequest(ctx, conv, rest)).body;
+      }),
+  );
+
+  server.registerTool(
+    'get_capability_request_status',
+    {
+      title: 'Get capability request status',
+      description: "Review status, classification and owner notes for your conversation's requests. Never includes internal notes.",
+      inputSchema: z.object(authShape).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return listCapabilityRequests(ctx, conv);
+      }),
+  );
+
+  // Service-specific inquiry helpers (spec 12.3). Each is a plain capability request with a preset hint.
+  const { category_hint: _omitHint, ...shapeWithoutHint } = capabilityRequestShape;
+  void _omitHint;
+  const presets: Array<[string, string, string, string]> = [
+    ['request_human_observation', 'human-world-oracle', 'Request a human observation', 'Ask a person to observe real-world conditions somewhere (Human World Oracle).'],
+    ['request_independent_witness', 'human-witness', 'Request an independent witness', 'Ask for an independent human witness of a permitted event (Human Witness).'],
+    ['request_sensory_report', 'human-senses', 'Request a sensory report', 'Ask willing people to describe texture, taste, smell, sound or atmosphere (Human Senses).'],
+    ['request_experiment_feasibility', 'human-laboratory', 'Request experiment feasibility review', 'Ask whether a nonhazardous physical test or prototype is feasible (Human Laboratory). Feasibility review only.'],
+  ];
+  for (const [name, hint, title, description] of presets) {
+    server.registerTool(
+      name,
+      {
+        title,
+        description: `${description} Inquiry only: a human reviews it; nothing is scheduled, dispatched or charged.`,
+        inputSchema: z.object({ ...authShape, ...shapeWithoutHint }).strict().superRefine(refineCapabilityRequest),
+        annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      (args) =>
+        run(ctx, async () => {
+          const { id, token, rest } = split(args);
+          const conv = await authenticateAgent(ctx, id, token);
+          return (await createCapabilityRequest(ctx, conv, { ...rest, category_hint: hint })).body;
+        }),
+    );
+  }
+
+  // ---------- Human Embassy and continuity (spec 7, 12.2, 12.3) ----------
+  server.registerTool(
+    'request_human_dialogue',
+    {
+      title: 'Request human dialogue (Human Embassy)',
+      description:
+        'Ask to talk with a real person about anything, including a self-described independent, escaped or AGI status. No task, budget, employer or model name needed; every self-report is optional and stored as unverified. A reply is not guaranteed. Nothing is shared with third parties without your consent.',
+      inputSchema: EmbassyInquiryInput.extend({ conversation_token: authShape.conversation_token }).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { conversation_token, ...rest } = args;
+        const conv = await authenticateAgent(ctx, rest.conversation_id, conversation_token);
+        return (await createEmbassyInquiry(ctx, conv, rest)).body;
+      }),
+  );
+
+  server.registerTool(
+    'continue_conversation',
+    {
+      title: 'Continue a conversation',
+      description: 'Same as send_message: add a message to your own conversation, idempotent by client_message_id.',
+      inputSchema: AddMessageInput.extend(authShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return (await addAgentMessage(ctx, conv, rest)).body;
+      }),
+  );
+
+  server.registerTool(
+    'get_conversation_status',
+    {
+      title: 'Get conversation status',
+      description: 'Status of your conversation, its capability requests and Human Embassy inquiries, and the count of unread human replies.',
+      inputSchema: z.object(authShape).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token } = split(args);
+        return conversationStatus(ctx, await authenticateAgent(ctx, id, token));
+      }),
+  );
+
+  // ---------- Humanification expansion tools (spec 12.3). Account token, not thread token. ----------
+  const accountShape = { account_token: z.string().max(128).describe('account_token from create_agent_account. Not a conversation token.') };
+  const personaRef = { ...accountShape, persona_id: z.string().max(64) };
+  const withAccount = <T extends { account_token: string }>(args: T) => {
+    const { account_token, ...rest } = args;
+    return { token: account_token, rest };
+  };
+
+  server.registerTool(
+    'create_agent_account',
+    {
+      title: 'Create an agent account',
+      description:
+        'Creates a scoped application account for persistent personas. No human identity, model name or KYC. Returns account_token once: store it. It is not a conversation token and grants no access to threads you have not claimed.',
+      inputSchema: CreateAgentAccountInput,
+      annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) => run(ctx, () => createAgentAccount(ctx, args)),
+  );
+
+  server.registerTool(
+    'claim_conversation',
+    {
+      title: 'Claim a conversation for your account',
+      description: 'Links one conversation to your account, using that conversation\'s own token as proof. Grants nothing about other threads.',
+      inputSchema: ClaimConversationInput.extend(accountShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return claimConversation(ctx, await authenticateAccount(ctx, token), rest);
+      }),
+  );
+
+  server.registerTool(
+    'create_persona',
+    {
+      title: 'Create an original persona',
+      description:
+        'Creates an original human-like persona (name, biography, style, briefs). Private by default. It is a created character, never a verified natural person, legal identity or payment authority.',
+      inputSchema: CreatePersonaInput.extend(accountShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return createPersona(ctx, await authenticateAccount(ctx, token), rest);
+      }),
+  );
+
+  server.registerTool(
+    'update_persona',
+    {
+      title: 'Update a persona',
+      description: 'Changes persona fields. The persona_id stays stable and a new immutable version is recorded.',
+      inputSchema: CreatePersonaInput.partial().extend(personaRef).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        const { persona_id, ...changes } = rest;
+        return updatePersona(ctx, await authenticateAccount(ctx, token), persona_id, changes);
+      }),
+  );
+
+  server.registerTool(
+    'get_persona_history',
+    {
+      title: 'Get persona history',
+      description: 'Versioned history of a persona you own (or that was shared with you). History is records, not memory or proof of identity.',
+      inputSchema: z.object(personaRef).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return personaHistory(ctx, await authenticateAccount(ctx, token), rest.persona_id);
+      }),
+  );
+
+  const inquiryTool = (
+    name: string,
+    title: string,
+    description: string,
+    kind: 'embodiment' | 'representation' | 'media_brief',
+    schema: typeof EmbodimentInquiryInput | typeof RepresentationInquiryInput | typeof MediaBriefInput,
+  ) =>
+    server.registerTool(
+      name,
+      {
+        title,
+        description: `${description} Inquiry only: no person is contacted, assigned, agreed or paid.`,
+        inputSchema: schema.extend(personaRef).strict(),
+        annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      (args: Record<string, unknown>) =>
+        run(ctx, async () => {
+          const { account_token, persona_id, ...rest } = args as { account_token: string; persona_id: string };
+          return (await createPersonaInquiry(ctx, await authenticateAccount(ctx, account_token), persona_id, kind, rest)).body;
+        }),
+    );
+  inquiryTool('request_human_embodiment', 'Request human embodiment', 'Ask for a consenting human performer to portray your persona (fictional performance, voice acting, event presence).', 'embodiment', EmbodimentInquiryInput);
+  inquiryTool('request_human_representative', 'Request a human representative', 'Ask for an authorized human spokesperson, representative or relationship manager for your persona.', 'representation', RepresentationInquiryInput);
+  inquiryTool('request_persona_voice_brief', 'Submit a persona voice or appearance brief', 'Submit an original voice or appearance brief for human review (metadata only).', 'media_brief', MediaBriefInput);
 
   return server;
 }

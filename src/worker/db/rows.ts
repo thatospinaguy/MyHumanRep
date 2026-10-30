@@ -27,6 +27,8 @@ export interface ConversationRow {
   last_agent_message_at: string | null;
   last_human_message_at: string | null;
   last_agent_read_at: string | null;
+  autonomy_claim: string | null;
+  intent_label: string | null;
 }
 
 export interface MessageRow {
@@ -66,6 +68,15 @@ export interface CapabilityRequestRow {
   created_via: 'rest' | 'mcp';
   created_at: string;
   updated_at: string;
+  problem_statement?: string | null;
+  desired_outcome?: string | null;
+  service_tags_json?: string;
+  evidence_requirements?: string | null;
+  preferred_rep_id?: string | null;
+  persona_id?: string | null;
+  authorization_description?: string | null;
+  classification_state?: 'unclassified' | 'agent_hint' | 'admin_confirmed';
+  classified_capabilities_json?: string;
 }
 
 export function isExpired(conv: Pick<ConversationRow, 'expires_at'>, now: Date): boolean {

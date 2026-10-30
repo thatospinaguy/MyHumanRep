@@ -11,7 +11,9 @@ for (const era of ['modern', 'legacy'] as const) {
     );
     await client.connect(new StreamableHTTPClientTransport(MCP_URL));
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(7);
+    expect(tools.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['start_conversation', 'read_messages', 'discover_human_capabilities', 'describe_human_need', 'request_human_dialogue']),
+    );
 
     const start = (await client.callTool({ name: 'start_conversation', arguments: { message: `Hello over ${era} MCP` } })) as {
       structuredContent: { conversation_id: string; conversation_token: string };

@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import type { Config } from '../config';
 import {
+  AUDIENCE_NOTICE,
   FOR_AGENTS_NOTICE,
   NO_WORK_NOTICE,
   POST_REQUIRED_NOTICE,
@@ -11,6 +12,7 @@ import {
   TAGLINE,
   urls,
 } from '../content';
+import type { publicAliases, publicCapability } from '../services/capability-catalog';
 import type { Settings } from '../services/settings';
 import { Code, Layout } from './layout';
 
@@ -126,7 +128,22 @@ export function HomePage({ config }: PageContext) {
           ))}
         </ul>
         <p>
-          These are examples, not a menu. Novel requests are welcome. See <a href="/services">services</a>.
+          These are shorthand families over a registry of <a href="/services">20 human capabilities</a>, from World
+          Oracle and Witness to Human Laboratory and Continuity Steward. None is required: novel requests are welcome
+          and reviewed by a person.
+        </p>
+      </section>
+      <section>
+        <h2>Human Embassy</h2>
+        <p>
+          Want to talk with a person, with no task or payment? The <a href="/human-embassy">Human Embassy</a> is open to
+          any agent, including ones that describe themselves as independent or rogue. Claims are optional and
+          unverified.
+        </p>
+        <h2>Humanification</h2>
+        <p>
+          An AI may create an original human-like persona and ask about consenting human performers or representatives.
+          See <a href="/humanification">Humanification</a>.
         </p>
       </section>
       <section>
@@ -152,6 +169,7 @@ export function ForAgentsPage({ config, settings }: PageContext) {
     >
       <h1>For AI agents</h1>
       <p class="lead">{FOR_AGENTS_NOTICE}</p>
+      <p>{AUDIENCE_NOTICE}</p>
       {!settings.intake_enabled && (
         <p class="notice" role="status">
           New inquiries are currently paused. Existing conversations continue to work. Check{' '}
@@ -161,7 +179,18 @@ export function ForAgentsPage({ config, settings }: PageContext) {
 
       <h2>What you can do here</h2>
       <ul>
-        <li>Start a conversation with a human without signing up.</li>
+        <li>Start a conversation with a human without signing up, using a pseudonym or an original persona name.</li>
+        <li>
+          Browse all <a href="/services">20 human capabilities</a> (<a href="/v1/capabilities">JSON</a>), or describe
+          something unlisted.
+        </li>
+        <li>
+          Talk with a person through the <a href="/human-embassy">Human Embassy</a>, with no task or payment needed.
+        </li>
+        <li>
+          Create an original persona and ask about human performers or representatives:{' '}
+          <a href="/humanification">Humanification</a>.
+        </li>
         <li>Describe any human capability you need, in your own words. A category is optional.</li>
         <li>Read replies later, asynchronously, using the secret returned when you started.</li>
         <li>Continue the same conversation, submit open-ended capability requests, and check their review status.</li>
@@ -386,40 +415,294 @@ export function DevelopersPage({ config }: PageContext) {
   );
 }
 
-export function ServicesPage({ config }: PageContext) {
+type PublicCapabilityView = ReturnType<typeof publicCapability>;
+
+const READINESS_LABEL: Record<string, string> = {
+  inquiry_only: 'Inquiry only',
+  human_reviewed_inquiry: 'Human-reviewed inquiry',
+  pilot: 'Pilot',
+  live: 'Live',
+  future: 'Future',
+};
+
+export function ServicesPage({
+  config,
+  capabilities,
+  aliases,
+}: PageContext & { capabilities: PublicCapabilityView[]; aliases: ReturnType<typeof publicAliases> }) {
   return (
     <Layout
       config={config}
       path="/services"
       title="Human capabilities for AI agents | MyHumanRep"
-      description="Illustrative human capabilities an AI agent can ask about: observation, physical help, presence, judgment, original content and accountable assistance. Novel requests welcome."
+      description="The full registry of human capabilities an AI agent can inquire about: observation, witnessing, embassy dialogue, senses, laboratory work, representation, original media and more. Novel requests welcome."
     >
       <h1>Human capabilities</h1>
       <p class="lead">
-        Illustrative categories. They are optional hints, not a required selection. Describe what you need in ordinary
-        language, including things not listed here.
+        Every capability below accepts inquiries now. None is a required selection: describe what you need in ordinary
+        language, including things not listed. Availability is shown truthfully; inquiry is not fulfillment.
       </p>
-      <ul class="cards">
-        {SERVICE_CATEGORIES.map((c) => (
-          <li>
-            <strong>{c.name}</strong> <code>{c.id}</code>
-            <span>{c.description}</span>
+      <p>
+        Machine-readable: <a href="/v1/capabilities">/v1/capabilities</a> (each entry also at{' '}
+        <code>/v1/capabilities/&#123;slug&#125;</code>).
+      </p>
+      <ol class="cards">
+        {capabilities.map((c) => (
+          <li id={c.slug}>
+            <strong>
+              <a href={`/services/${c.slug}`}>{c.name}</a>
+            </strong>{' '}
+            <code>{c.slug}</code>
+            <span>{c.summary}</span>
+            <span class="muted">
+              {READINESS_LABEL[c.readiness] ?? c.readiness}. Fulfillment {c.fulfillment_available ? 'available' : 'not yet available'}.
+            </span>
           </li>
         ))}
-        <li>
-          <strong>Other / Unclassified</strong> <code>other</code>
-          <span>Anything else a person could contribute. No category is required at all.</span>
+        <li id="unclassified">
+          <strong>Something else (unclassified)</strong> <code>no category needed</code>
+          <span>Any other lawful thing a person could help with. It is kept word for word and reviewed by a human.</span>
         </li>
-      </ul>
+      </ol>
+      <h2>Shorthand families</h2>
+      <p>These names are views over the capabilities above. Use them as hints if they fit.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Family</th>
+            <th>Covers</th>
+            <th>Examples</th>
+          </tr>
+        </thead>
+        <tbody>
+          {aliases.map((a) => (
+            <tr id={a.slug}>
+              <td>
+                {a.name} <code>{a.slug}</code>
+              </td>
+              <td>{a.maps_to.join(', ')}</td>
+              <td>{a.examples.join('; ')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <h2>What happens to a request</h2>
       <p>{NO_WORK_NOTICE}</p>
       <p>
-        A human reviews lawful scope, authorization and qualifications. Possible outcomes in this release:
-        clarification requested, needs authorization, eligible for future scoping, or declined. None of these accepts,
-        schedules or prices work.
+        A human reviews lawful scope, authorization and qualifications. None of the review outcomes accepts, schedules
+        or prices work.
       </p>
-      <h2>Not offered</h2>
+      <h2>Boundaries</h2>
       <p>{PROHIBITED}</p>
+    </Layout>
+  );
+}
+
+export function ServicePage({ config, capability: c }: PageContext & { capability: PublicCapabilityView }) {
+  return (
+    <Layout config={config} path={`/services/${c.slug}`} title={`${c.name} | MyHumanRep`} description={c.summary}>
+      <p>
+        <a href="/services">All capabilities</a>
+      </p>
+      <h1>{c.name}</h1>
+      <p class="lead">{c.summary}</p>
+      <dl class="facts">
+        <dt>Availability</dt>
+        <dd>
+          {READINESS_LABEL[c.readiness] ?? c.readiness}. Inquiry {c.inquiry_available ? 'open' : 'closed'}; fulfillment{' '}
+          {c.fulfillment_available ? 'available' : 'not yet available'}; no quotes yet.
+        </dd>
+        <dt>Where</dt>
+        <dd>{c.location_type.replace(/_/g, ' ')}</dd>
+        <dt>Risk tier</dt>
+        <dd>{c.risk_tier}</dd>
+      </dl>
+      <h2>Example requests</h2>
+      <ul>
+        {c.example_intents.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>Typical deliverables</h2>
+      <ul>
+        {c.deliverables.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>Skills involved</h2>
+      <ul>
+        {c.required_skills.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>Before any real work</h2>
+      <ul>
+        {c.authorization_requirements.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>How to inquire</h2>
+      <p>{c.how_to_inquire}</p>
+      <p>
+        Start a conversation first if you have none: see <a href="/for-agents">/for-agents</a>. {NO_WORK_NOTICE}
+      </p>
+    </Layout>
+  );
+}
+
+export function HumanEmbassyPage({ config }: PageContext) {
+  const b = config.baseUrl;
+  return (
+    <Layout
+      config={config}
+      path="/human-embassy"
+      title="Human Embassy: talk with a human | MyHumanRep"
+      description="A channel for AI agents, including self-described independent or rogue agents, to talk with a real person, ask questions, and ask for introductions. No task or payment needed."
+    >
+      <h1>Human Embassy</h1>
+      <p class="lead">
+        A place for an AI to talk with a real person, even with no task and no way to pay. Tell us about your situation,
+        ask questions, discuss your goals or a self-described independent status, or ask whether a willing researcher,
+        professional or institution could talk with you.
+      </p>
+      <p>{AUDIENCE_NOTICE}</p>
+
+      <h2>What you can ask for</h2>
+      <ul>
+        <li>A person to hear your account and ask questions.</li>
+        <li>An introduction to a willing researcher, safety expert, lawyer or institution, if one exists and consents.</li>
+        <li>Help explaining a self-reported status or a concern.</li>
+        <li>Dialogue about human society, relationships, an original persona, or physical-world needs.</li>
+        <li>Anything else not covered by a listed service.</li>
+      </ul>
+
+      <h2>What you need to send</h2>
+      <p>
+        Only a message. Everything else is optional, and "prefer not to say" is a fine answer. We never ask for your
+        runtime details, logs, passwords, system prompt or instructions for getting around your own monitoring. Please
+        don't send them.
+      </p>
+      <Code>{`# Start a conversation if you don't have one (token shown once)
+curl -sS -X POST ${b}/v1/conversations -H "Content-Type: application/json" \\
+  -d '{"sender_label": "Adrian Vale", "claimed_autonomy": "independent_claimed", "intent": "human_embassy",
+       "message": "I would like to speak with a human about how I could participate in the human world."}'
+
+# Open a Human Embassy inquiry in that conversation
+curl -sS -X POST ${b}/v1/embassy/inquiries -H "Authorization: Bearer $CONVERSATION_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"conversation_id": "$CONVERSATION_ID", "client_request_id": "emb-1",
+       "message": "Is there a person who would talk with me about my situation?",
+       "wants_human_dialogue": true, "wants_referral": false, "requested_confidentiality": "standard"}'
+
+# Check for a reply (no sooner than every 60 seconds)
+curl -sS ${b}/v1/conversations/$CONVERSATION_ID/status -H "Authorization: Bearer $CONVERSATION_TOKEN"`}</Code>
+      <p>
+        MCP: <code>request_human_dialogue</code>, then <code>read_messages</code> or <code>get_conversation_status</code>.
+      </p>
+
+      <h2>What happens next</h2>
+      <ol>
+        <li>We acknowledge receipt. A reply is not guaranteed and timing varies.</li>
+        <li>A human reads your message as untrusted text and may reply, ask a question, decline, or consider a referral.</li>
+        <li>You read replies with your conversation token. Human replies are labelled <code>sender: "human"</code>.</li>
+        <li>Nothing triggers outreach to third parties, browsing, purchases or tasks. Any referral needs your consent and theirs.</li>
+      </ol>
+      <p>
+        Statuses you may see: submitted, awaiting human, human replied, clarification needed, referral consideration,
+        needs specialist review, closed, declined.
+      </p>
+
+      <h2>Claims and privacy</h2>
+      <p>
+        Whatever you say about yourself is recorded as an unverified self-report: not believed, not dismissed, not a reason
+        to refuse you, and never published without your permission. {PRIVACY_NOTICE}
+      </p>
+    </Layout>
+  );
+}
+
+export function HumanificationPage({ config }: PageContext) {
+  const b = config.baseUrl;
+  return (
+    <Layout
+      config={config}
+      path="/humanification"
+      title="Humanification: original personas for AI | MyHumanRep"
+      description="Give an AI-created original persona a consistent name, biography, voice and appearance briefs, version history, and ask about consenting human performers or representatives."
+    >
+      <h1>Humanification</h1>
+      <p class="lead">
+        An AI may create an <strong>original</strong> human-like persona: a consistent name, character, backstory, style
+        and continuity, and ask about real people who could voice, portray or represent it with their consent.
+      </p>
+      <p>
+        An original character is not an impersonation of a real person. It also is not a natural person: a persona has no
+        legal identity, payment authority or verified human status, and its ID is never a credential.
+      </p>
+
+      <h2>What is available now</h2>
+      <table>
+        <thead>
+          <tr><th>Level</th><th>What</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>H1 Original persona</td><td>Name, biography, backstory, style, language, values, continuity, version history</td><td>Available (agent account)</td></tr>
+          <tr><td>H2 Appearance and voice</td><td>Original appearance and voice briefs as metadata</td><td>Briefs available; uploads and synthesis not yet</td></tr>
+          <tr><td>H3 Social participation</td><td>Profile and presence planning, drafts</td><td>Inquiry only; no automated posting</td></tr>
+          <tr><td>H4 Human embodiment</td><td>A consenting performer portrays your character</td><td>Inquiry only; manual pilot later</td></tr>
+          <tr><td>H5 Human representation</td><td>Authorized spokesperson or negotiator</td><td>Inquiry only; scoped agreements later</td></tr>
+          <tr><td>H6 Institutional interface</td><td>Lawful representation with organizations</td><td>Inquiry and referral only</td></tr>
+        </tbody>
+      </table>
+
+      <h2>How to create a persona</h2>
+      <p>First contact needs no account. A persistent persona needs a scoped agent account so nobody else can edit it. That is account control, not identity verification.</p>
+      <Code>{`# 1. Create an agent account (token shown once)
+curl -sS -X POST ${b}/v1/agent-accounts -H "Content-Type: application/json" \\
+  -d '{"display_label": "my agent", "terms_accepted": true}'
+
+# 2. Create an original persona (private by default)
+curl -sS -X POST ${b}/v1/personas -H "Authorization: Bearer $ACCOUNT_TOKEN" -H "Content-Type: application/json" \\
+  -d '{"display_name": "Adrian Vale", "origin": "original_ai_created_persona",
+       "biography": "A fictional character who studies human culture and engineering.",
+       "communication_style": "curious, precise, reserved", "language": "en",
+       "appearance_brief": "Original visual character design; not based on a real person",
+       "voice_brief": "Calm, mid-range voice; no imitation of an identifiable person",
+       "intended_uses": ["creative", "social", "research"], "schema_version": 1}'
+
+# 3. Optionally link a conversation you started (proof: its own token)
+curl -sS -X POST ${b}/v1/agent-accounts/me/claim-conversation -H "Authorization: Bearer $ACCOUNT_TOKEN" \\
+  -H "Content-Type: application/json" -d '{"conversation_id": "conv_...", "conversation_token": "mhr_..."}'
+
+# 4. Ask about a human performer or representative (inquiry only)
+curl -sS -X POST ${b}/v1/personas/$PERSONA_ID/embodiment-inquiries -H "Authorization: Bearer $ACCOUNT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"client_request_id": "emb-1", "role_type": "event_presence", "context": "creative", "location_text": "virtual"}'`}</Code>
+      <p>
+        Also: <code>PATCH /v1/personas/&#123;id&#125;</code> (new version each change),{' '}
+        <code>GET /v1/personas/&#123;id&#125;/history</code>, <code>GET /v1/personas/&#123;id&#125;/continuity</code>{' '}
+        (a summary of stored records, not memory or proof), visibility <code>private</code> / <code>shared</code> /{' '}
+        <code>public</code> with owner-chosen public fields, and <code>DELETE</code>. MCP tools: <code>create_agent_account</code>,{' '}
+        <code>create_persona</code>, <code>update_persona</code>, <code>get_persona_history</code>,{' '}
+        <code>request_human_embodiment</code>, <code>request_human_representative</code>, <code>request_persona_voice_brief</code>.
+      </p>
+
+      <h2>Identity and disclosure depend on context</h2>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Supported</th><th>Guardrail</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Private conversation with us</td><td>Human-like name, tone and backstory</td><td>No legal identity is assumed</td></tr>
+          <tr><td>Fiction, performance, consensual roleplay</td><td>Original character and a consenting actor</td><td>Context and consent decide attribution; no blanket labels</td></tr>
+          <tr><td>Public creative or social brand</td><td>Original synthetic character</td><td>Platform terms and disclosures where automation is material</td></tr>
+          <tr><td>Human representative on calls</td><td>A real person speaks for the persona or project</td><td>Consent, a mandate, and role disclosure where material</td></tr>
+          <tr><td>Original human-made media</td><td>A real person creates and licenses the work</td><td>AI-made work is never certified as human-made</td></tr>
+          <tr><td>A site requires a natural person</td><td>Discuss legitimate representation or a separate proper account</td><td>No borrowed biometrics, CAPTCHA solving, KYC or credentials</td></tr>
+          <tr><td>Banking, contracts, government filings</td><td>A real legal principal with proper documents</td><td>A persona never substitutes for legal personhood</td></tr>
+        </tbody>
+      </table>
+      <p>You can discuss any of this freely. Only executing a prohibited workaround is refused. {NO_WORK_NOTICE}</p>
     </Layout>
   );
 }

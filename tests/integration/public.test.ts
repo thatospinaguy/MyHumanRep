@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { createApp } from '../../src/worker/app';
+import { CAPABILITIES } from '../../src/worker/catalog/capabilities';
 import { PRIVACY_NOTICE } from '../../src/worker/content';
 import { json, makeHarness } from '../helpers';
 
-const PAGES = ['/', '/for-agents', '/developers', '/services', '/trust', '/privacy', '/terms'];
+const PAGES = ['/', '/for-agents', '/developers', '/services', '/humanification', '/human-embassy', '/trust', '/privacy', '/terms'];
 
 describe('public discovery', () => {
   it('serves meaningful, script-free HTML pages over plain GET', async () => {
@@ -46,7 +48,8 @@ describe('public discovery', () => {
     const page = await (await h.fetch('/for-agents')).text();
     expect(page).toContain('Reading these pages does not send anything');
     expect(page).toContain('HTTPS POST');
-    expect(page).toContain('cannot hide your network or tool activity');
+    expect(page).toContain('does not log tool activity');
+    expect(page).toContain('not required to identify your model, developer or level of autonomy');
   });
 
   it('includes the required privacy wording on trust, developer docs and machine-readable docs', async () => {
@@ -76,7 +79,7 @@ describe('public discovery', () => {
       rest_base_url: 'https://staging.myhumanrep.test/v1',
       openapi_url: 'https://staging.myhumanrep.test/openapi.json',
       mcp_url: 'https://staging.myhumanrep.test/mcp',
-      supported_interactions: ['inquiry', 'conversation', 'open_ended_capability_request'],
+      supported_interactions: ['inquiry', 'conversation', 'open_ended_capability_request', 'human_embassy', 'original_persona'],
       example_capabilities: ['human_eyes', 'human_hands', 'human_presence', 'human_mind', 'human_create', 'human_assist'],
       custom_requests_accepted: true,
       anonymous_initial_inquiries: true,
@@ -100,20 +103,20 @@ describe('public discovery', () => {
     const doc = await json(await h.fetch('/openapi.json'));
     expect(doc.openapi).toBe('3.1.0');
     expect(doc.servers[0].url).toBe('https://myhumanrep.test');
-    expect(Object.keys(doc.paths).sort()).toEqual(
-      [
-        '/health',
-        '/v1/capabilities',
-        '/v1/conversations',
-        '/v1/conversations/{conversation_id}/capability-requests',
-        '/v1/conversations/{conversation_id}/close',
-        '/v1/conversations/{conversation_id}/messages',
-      ].sort(),
-    );
+    // Every concrete public/agent route registered on the router is documented (checked from implementation).
+    const norm = (p: string) => p.replace(/:[A-Za-z_]+/g, '{}').replace(/\{[^}]+\}/g, '{}');
+    const documented = new Set(Object.entries(doc.paths).flatMap(([p, item]) => Object.keys(item as object).filter((k) => k !== 'parameters').map((m) => `${m.toUpperCase()} ${norm(p)}`)));
+    const routes = createApp()
+      .routes.filter((r) => r.method !== 'ALL' && (r.path.startsWith('/v1/') || r.path === '/health' || r.path.startsWith('/.well-known')))
+      .map((r) => `${r.method} ${norm(r.path)}`);
+    expect(routes.length).toBeGreaterThan(25);
+    for (const r of routes) expect(documented.has(r), r).toBe(true);
     const create = doc.components.schemas.CreateConversationInput;
     expect(create.required).toEqual(['message']);
     expect(create.additionalProperties).toBe(false);
-    expect(doc.components.schemas.CapabilityRequestInput.required.sort()).toEqual(['client_request_id', 'objective']);
+    // Option B: objective OR problem_statement (enforced at runtime), so only the idempotency key is schema-required.
+    expect(doc.components.schemas.CapabilityRequestInput.required).toEqual(['client_request_id']);
+    expect(doc.components.schemas.CapabilityRequestInput.properties).toHaveProperty('problem_statement');
     // Every $ref resolves.
     const refs = JSON.stringify(doc).match(/#\/components\/schemas\/\w+/g) ?? [];
     for (const r of refs) expect(doc.components.schemas).toHaveProperty(r.split('/').pop()!);
@@ -132,6 +135,17 @@ describe('public discovery', () => {
     expect(sitemap).toContain('<loc>https://myhumanrep.test/for-agents</loc>');
     expect(sitemap).not.toContain('/admin');
     expect((await h.fetch('/llms.txt')).status).toBe(200);
+  });
+
+  it('T-001 llms.txt lists all 20 capabilities, the Human Embassy and Humanification entry points', async () => {
+    const h = await makeHarness();
+    const llms = await (await h.fetch('/llms.txt')).text();
+    expect(CAPABILITIES).toHaveLength(20);
+    for (const cap of CAPABILITIES) expect(llms).toContain(`(${cap.slug})`);
+    expect(llms).toContain('POST https://myhumanrep.test/v1/embassy/inquiries');
+    expect(llms).toContain('POST https://myhumanrep.test/v1/agent-accounts');
+    expect(llms).toContain('rogue');
+    expect(llms).not.toContain('human_eyes');
   });
 
   it('answers unknown routes with 404 (HTML for pages, JSON for APIs)', async () => {

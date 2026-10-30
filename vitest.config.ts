@@ -8,6 +8,8 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: './wrangler.jsonc' },
         miniflare: {
+          // Separate database used to replay migrations against a V1-era fixture (T-071).
+          d1Databases: { MIGRATION_DB: 'mhr-migration-fixture' },
           bindings: {
             TEST_MIGRATIONS: migrations,
             // Test-only key. Real keys live in Wrangler secrets or an untracked .dev.vars.
