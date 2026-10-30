@@ -271,6 +271,12 @@ function assertAdminWritable(ctx: AdminContext, conv: ConversationRow): void {
   }
 }
 
+/**
+ * Statements that post an agent-visible human message. The insert only happens while the
+ * conversation is still writable *at execution time*, and the conversation update only fires if
+ * the insert did, so a concurrent agent close/expiry cannot leave a closed thread with an open
+ * status. Put the insert first in the batch and pass the batch result to `assertMessageInserted`.
+ */
 function humanMessageStatements(
   ctx: AdminContext,
   conv: ConversationRow,
@@ -285,16 +291,25 @@ function humanMessageStatements(
     ctx.db
       .prepare(
         `INSERT INTO messages (id, conversation_id, seq, sender, body, client_message_id, body_hash, via, created_at, capability_request_id)
-         SELECT ?1, ?2, COALESCE((SELECT MAX(seq) FROM messages WHERE conversation_id = ?2), 0) + 1, 'human', ?3, NULL, ?4, 'admin', ?5, ?6`,
+         SELECT ?1, ?2, COALESCE((SELECT MAX(seq) FROM messages WHERE conversation_id = ?2), 0) + 1, 'human', ?3, NULL, ?4, 'admin', ?5, ?6
+         WHERE EXISTS (SELECT 1 FROM conversations WHERE id = ?2 AND closed_at IS NULL AND blocked_at IS NULL AND expires_at > ?5)`,
       )
       .bind(messageId, conv.id, body, bodyHash, now, capabilityRequestId),
     ctx.db
       .prepare(
         `UPDATE conversations SET status = ?3, human_message_count = human_message_count + 1, last_human_message_at = ?2,
-           updated_at = ?2 WHERE id = ?1`,
+           updated_at = ?2 WHERE id = ?1 AND EXISTS (SELECT 1 FROM messages WHERE id = ?4)`,
       )
-      .bind(conv.id, now, status),
+      .bind(conv.id, now, status, messageId),
   ];
+}
+
+/** Turns a lost race (conversation closed, blocked or expired mid-request) into the matching 409. */
+async function assertMessageInserted(ctx: AdminContext, result: D1Result | undefined, conversationId: string): Promise<void> {
+  if ((result?.meta.changes ?? 0) === 1) return;
+  const fresh = await loadConversation(ctx, conversationId);
+  assertAdminWritable(ctx, fresh);
+  throw errors.conflict('The conversation changed while saving. Reload and try again.', 'state_changed');
 }
 
 export async function replyToConversation(ctx: AdminContext, id: string, raw: unknown) {
@@ -304,10 +319,11 @@ export async function replyToConversation(ctx: AdminContext, id: string, raw: un
   const status = nextConversationStatus(conv.status, 'human_reply');
   if (!status) throw errors.conflict('This conversation is closed.', 'conversation_closed');
   const messageId = newId('msg');
-  await ctx.db.batch([
+  const results = await ctx.db.batch([
     ...humanMessageStatements(ctx, conv, messageId, input.message, await sha256Hex(input.message), status, null),
-    auditStatement(ctx.db, ctx.actor, 'conversation.reply', 'conversation', id, { message_id: messageId }, ctx.now),
+    auditStatement(ctx.db, ctx.actor, 'conversation.reply', 'conversation', id, { message_id: messageId }, ctx.now, messageId),
   ]);
+  await assertMessageInserted(ctx, results[0], id);
   return { message_id: messageId, status };
 }
 
@@ -607,21 +623,24 @@ export async function patchRequest(ctx: AdminContext, id: string, raw: unknown) 
     changed.push('internal_category');
   }
 
-  const statements: D1PreparedStatement[] = [
-    ctx.db.prepare(`UPDATE capability_requests SET ${sets.join(', ')} WHERE id = ?1`).bind(id, ...params),
-  ];
+  const statements: D1PreparedStatement[] = [];
   let messageId: string | null = null;
   if (input.message_to_agent !== undefined) {
     assertAdminWritable(ctx, conv);
     const status = nextConversationStatus(conv.status, 'human_reply');
     if (!status) throw errors.conflict('This conversation is closed.', 'conversation_closed');
     messageId = newId('msg');
+    // Message first: the decision below only applies if the message was actually posted.
     statements.push(
       ...humanMessageStatements(ctx, conv, messageId, input.message_to_agent, await sha256Hex(input.message_to_agent), status, id),
     );
     changed.push('message_to_agent');
   }
+  const guard = messageId ? ` AND EXISTS (SELECT 1 FROM messages WHERE id = ?${params.length + 2})` : '';
   statements.push(
+    ctx.db
+      .prepare(`UPDATE capability_requests SET ${sets.join(', ')} WHERE id = ?1${guard}`)
+      .bind(id, ...params, ...(messageId ? [messageId] : [])),
     auditStatement(
       ctx.db,
       ctx.actor,
@@ -630,9 +649,11 @@ export async function patchRequest(ctx: AdminContext, id: string, raw: unknown) 
       id,
       { changed, from_status: row.status, to_status: input.status ?? row.status, message_id: messageId },
       ctx.now,
+      messageId ?? undefined,
     ),
   );
-  await ctx.db.batch(statements);
+  const results = await ctx.db.batch(statements);
+  if (messageId) await assertMessageInserted(ctx, results[0], conv.id);
   return { request: adminRequest(await loadRequest(ctx, id)), message_id: messageId };
 }
 
@@ -652,13 +673,14 @@ export async function clarifyRequest(ctx: AdminContext, id: string, raw: unknown
   if (!convStatus) throw errors.conflict('This conversation is closed.', 'conversation_closed');
   const messageId = newId('msg');
   const now = iso(ctx.now);
-  await ctx.db.batch([
+  const results = await ctx.db.batch([
+    ...humanMessageStatements(ctx, conv, messageId, input.question, await sha256Hex(input.question), convStatus, id),
     ctx.db
       .prepare(
-        `UPDATE capability_requests SET status = 'clarification_requested', public_status_note = ?2, updated_at = ?3 WHERE id = ?1`,
+        `UPDATE capability_requests SET status = 'clarification_requested', public_status_note = ?2, updated_at = ?3
+         WHERE id = ?1 AND EXISTS (SELECT 1 FROM messages WHERE id = ?4)`,
       )
-      .bind(id, 'Clarification requested. See the linked message in this conversation and reply with a message.', now),
-    ...humanMessageStatements(ctx, conv, messageId, input.question, await sha256Hex(input.question), convStatus, id),
+      .bind(id, 'Clarification requested. See the linked message in this conversation and reply with a message.', now, messageId),
     auditStatement(
       ctx.db,
       ctx.actor,
@@ -667,8 +689,10 @@ export async function clarifyRequest(ctx: AdminContext, id: string, raw: unknown
       id,
       { from_status: row.status, message_id: messageId },
       ctx.now,
+      messageId,
     ),
   ]);
+  await assertMessageInserted(ctx, results[0], conv.id);
   return { request: adminRequest(await loadRequest(ctx, id)), message_id: messageId };
 }
 

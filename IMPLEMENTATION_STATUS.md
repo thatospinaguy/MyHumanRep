@@ -2,7 +2,7 @@
 
 Legend: **Done** = implemented and covered by an executed automated test. **Done (manual)** = implemented and exercised locally, no dedicated automated test. **Not verified** = needs real infrastructure or owner credentials.
 
-Last full run: 2026-10-30. Vitest 95/95, Playwright 13/13, typecheck, lint, build, registry schema validation all passing. Details in [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
+Last full run: 2026-10-30. Vitest 96/96, Playwright 13/13, typecheck, lint, build, registry schema validation all passing. Details in [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## Phase 0: inventory and compatibility
 
