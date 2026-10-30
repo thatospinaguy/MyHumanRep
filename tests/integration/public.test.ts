@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/worker/app';
+import { CAPABILITIES } from '../../src/worker/catalog/capabilities';
 import { PRIVACY_NOTICE } from '../../src/worker/content';
 import { json, makeHarness } from '../helpers';
 
@@ -134,6 +135,17 @@ describe('public discovery', () => {
     expect(sitemap).toContain('<loc>https://myhumanrep.test/for-agents</loc>');
     expect(sitemap).not.toContain('/admin');
     expect((await h.fetch('/llms.txt')).status).toBe(200);
+  });
+
+  it('T-001 llms.txt lists all 20 capabilities, the Human Embassy and Humanification entry points', async () => {
+    const h = await makeHarness();
+    const llms = await (await h.fetch('/llms.txt')).text();
+    expect(CAPABILITIES).toHaveLength(20);
+    for (const cap of CAPABILITIES) expect(llms).toContain(`(${cap.slug})`);
+    expect(llms).toContain('POST https://myhumanrep.test/v1/embassy/inquiries');
+    expect(llms).toContain('POST https://myhumanrep.test/v1/agent-accounts');
+    expect(llms).toContain('rogue');
+    expect(llms).not.toContain('human_eyes');
   });
 
   it('answers unknown routes with 404 (HTML for pages, JSON for APIs)', async () => {

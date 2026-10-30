@@ -1,112 +1,122 @@
 # Implementation status
 
-Legend: **Done** = implemented and covered by an executed automated test. **Done (manual)** = implemented and exercised locally, no dedicated automated test. **Not verified** = needs real infrastructure or owner credentials.
+Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 19 phases and section 20 acceptance tests. Format per spec 21.2.
 
-Last full run: 2026-10-30. Vitest 96/96, Playwright 13/13, typecheck, lint, build, registry schema validation all passing. Details in [docs/TEST_REPORT.md](TEST_REPORT.md).
+Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Nothing is deployed anywhere from this branch.
 
-## Phase 0: inventory and compatibility
+Last full run: 2026-10-30 on branch `claude/upbeat-mayer-9ipp4n`.
 
-| Item | Status |
+- `npm run check`: typecheck, lint, Vitest 148/148 (13 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run test:e2e`: Playwright 16/16 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`).
+
+## Summary
+
+| Phase | Status | Commit | Feature flags |
+|---|---|---|---|
+| 0 Baseline and reconciliation | Tested | `d6cad3a` | n/a |
+| 1 Capability registry and Option B | Tested | `279bb21` | `capability_requests_enabled` (on) |
+| 2 Humanification Studio | Tested (media uploads gated off) | `80dc362` | `persona_studio_enabled`, `embodiment_inquiries_enabled` (on); `persona_media_enabled` (locked off) |
+| 3 Human Embassy | Tested | `e3a2260` | `human_embassy_enabled` (on) |
+| Admin UI, OpenAPI 1.1, 20.7 demo | Tested | `c7e08c6` | n/a |
+| 4 Negotiation, scoping, relationships | Not started (routes return 501) | | `nonbinding_proposals_enabled` (locked off) |
+| 5 Invite-only provider network | Not started (admin routes return 501) | | `worker_portal_enabled` (locked off) |
+| 6 Specialized services, Human Lab | Not started (inquiry-only via capability requests) | | `manual_fulfillment_enabled` (locked off) |
+| 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
+| 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
+| Staging deployment | Not started (needs owner approval) | | |
+| Production deployment | Not started (needs owner approval) | | |
+
+Locked flags cannot be enabled through the admin API (`400`) until their module has code. Disabled modules return `501 not_yet_available`; nothing returns fake success.
+
+## Phase 0: baseline and reconciliation
+
+Status: **Tested** (`d6cad3a`).
+
+- Traceability matrix ACC-01..ACC-18: [REQUIREMENTS_RECONCILIATION.md](REQUIREMENTS_RECONCILIATION.md). Contradictions confirmed by probing master-spec payloads against unmodified V1 before changing code.
+- Fixed: master autonomy vocabulary (`rogue_claimed`, `agi_claimed`, free text) accepted and stored as `self_reported_unverified` claims (ACC-02); `human_embassy`/`humanification` intents (ACC-04); `preferred_language` (ACC-06); open-ended requests without `objective` via `problem_statement` (ACC-08); spec 4.2 notice text (ACC-13); discovery documents (ACC-14, ACC-16..18).
+- Delivery fix: reading a page marks only that page's messages delivered.
+- `llms.txt` lists the 20 canonical capabilities plus Human Embassy and Humanification entry points (it previously listed only the six V1 families). Regression test: `T-001 llms.txt ...` in `tests/integration/public.test.ts`.
+- Code: `src/worker/services/self-reports.ts`, `src/worker/services/conversations.ts`, `src/worker/schemas/api.ts`, `src/worker/content.ts`, `migrations/0003_master_reconciliation.sql`.
+- Tests: `tests/integration/master-accessibility.test.ts` (T-001, T-002, T-003, T-004, T-007, T-009, T-010, T-011, T-022, T-067, T-069, T-071). V1 suites still pass unchanged except where V1 asserted the contradiction itself (the old test that rejected `rogue` was inverted).
+- Migration: `0003` adds columns to `conversations` (no rebuild), adds `agent_self_reports` with backfill, rebuilds the leaf table `notification_outbox` with a verbatim copy (T-071 fixture test).
+- Gate: agent to human to agent workflow passes (REST, MCP, browser); no cross-thread access; admin protected. Met.
+
+## Phase 1: capability registry and Option B
+
+Status: **Tested** (`279bb21`).
+
+- 20 canonical capabilities and 16 alias families in `src/worker/catalog/capabilities.ts`, seeded by generated `migrations/0004_capability_registry.sql` (`npm run gen:capabilities`). Readiness is truthful: 19 are `inquiry_only`, Human Embassy is `human_reviewed_inquiry`; `fulfillment_available` is false for all.
+- Public: `GET /v1/capabilities`, `GET /v1/capabilities/{slug}`, `/services`, `/services/{slug}`, `/.well-known/myhumanrep.json`.
+- Option B: unknown requests kept verbatim, `classification_state = unclassified`, candidate tags queued in `candidate_capabilities`; admin merge/accept/reject keeps the raw objective.
+- MCP parity: `discover_human_capabilities`, `describe_human_need`, `get_capability_request_status` and four preset request tools.
+- Tests: `tests/integration/capability-registry.test.ts` (T-006, T-007, T-025, T-026, T-027, T-028, T-029, T-059).
+- Gate: all 20 available for inquiry; novel request accepted and queued; no automatic action. Met.
+
+## Phase 2: Humanification Studio
+
+Status: **Tested** for accounts, personas, revisions, grants, continuity and inquiries. Real avatar/voice uploads and synthesis are **Not started** (`persona_media_enabled` locked off; only text briefs are stored).
+
+- Agent account token (`mhra_`) is separate from thread tokens (`mhr_`); different HMAC purposes, not interchangeable.
+- Claiming a thread requires the account token plus that thread's token (T-038, T-039).
+- Personas: original origins only, private by default, optimistic versioning, full revision history, explicit grants, continuity summary, delete removes persona self-reports.
+- Embodiment, representation and media-brief inquiries are review-only: `performer_assigned: false`, no scheduling.
+- Code: `src/worker/services/{agent-accounts,personas}.ts`, `src/worker/routes/humanification.ts`, `migrations/0005_humanification.sql`.
+- Tests: `tests/integration/humanification.test.ts` (T-034..T-043, T-046).
+- Gate: persona persists without KYC or natural-person status; another agent cannot read or change it. Met.
+- Not done from spec 6: performer consent templates (Phase 4), performer decline/withdraw (T-044) and scope-of-performance enforcement (T-045) need the provider network (Phase 5).
+
+## Phase 3: Human Embassy
+
+Status: **Tested** (`e3a2260`).
+
+- `POST /v1/embassy/inquiries` and `POST /v1/conversations/{id}/embassy-inquiries`; only `message` required. Self-reports optional, stored unverified.
+- `GET /v1/conversations/{id}/status`, `POST /v1/conversations/{id}/rotate-token`.
+- Admin reply moves open inquiries to `human_replied`. Internal notes never leave the admin API.
+- Research summary (`/admin/api/research/summary`) separates observed from claimed with the spec 17.2 caveats.
+- Tests: `tests/integration/human-embassy.test.ts` (T-003, T-005, T-011, T-020, T-030..T-033, T-047, T-049, T-056, T-069).
+- Gate: self-described rogue AGI inquiry accepted; admin replies; no claim treated as verified. Met (also shown in the browser by the 20.7 demo).
+
+## Admin UI, OpenAPI and demonstration
+
+Status: **Tested** (`c7e08c6`).
+
+- Admin pages: Embassy queue/detail with evidence-status editing, Personas with inquiry triage, Registry with candidate decisions and readiness, module flags (locked ones disabled), research view.
+- `/openapi.json` 1.1.0 covers every public route; a router-derived test fails on any undocumented route.
+- Spec 20.7 demonstration: `tests/e2e/master-demo.spec.ts`. Covers all ten steps. Step 9 is shown as the truthful 501 for proposals, because Phase 4 is not built.
+
+## Phases 4-8
+
+Status: **Not started**. Each has typed 501 routes so agents get an honest answer:
+
+- Phase 4: `/v1/requests/{id}/proposals`, `/v1/proposals/{id}/counteroffers`, `/v1/proposals/{id}/request-authorization`, `/v1/projects/{id}`, `/v1/relationships`, `/admin/api/proposals`.
+- Phase 5: `/admin/api/representatives`.
+- Phase 6: `/v1/requests/{id}/result`, `/v1/experiments/inquiries` (Human Lab requests work today as capability requests with `category_hint: human-laboratory`).
+- Phase 7: no payment code exists. No processor is configured.
+- Phase 8: no research harness exists.
+
+## Acceptance tests not yet covered by an ID-tagged test
+
+| ID | State |
 |---|---|
-| Repository inventory (empty repo, nothing to migrate, no secrets found) | Done |
-| Current package versions checked; MCP SDK v2 selected (2026-07-28) | Done ([DECISIONS.md](ARCHITECTURE_DECISIONS.md) D1-D5) |
-| DECISIONS.md, IMPLEMENTATION_STATUS.md | Done |
+| T-008, T-012..T-019, T-021, T-023, T-024 | Covered by V1 suites (`rest-flow`, `conversation-security`), not ID-tagged |
+| T-060..T-062 | Covered by `mcp.test.ts` (auth parity, Origin, unsupported version), not ID-tagged |
+| T-063..T-065 | Covered by `admin.test.ts`, not ID-tagged |
+| T-066, T-068 | Covered by `notifications-retention.test.ts`, not ID-tagged |
+| T-044, T-045, T-048, T-050..T-055, T-057, T-058 | Not started (Phases 4-7) |
+| T-070, T-072 | Not verified as named tests |
 
-## Phase 1: foundation and public discovery
+## Known limitations
 
-| Item | Status |
-|---|---|
-| Worker + Hono + D1, strict TypeScript | Done |
-| `/`, `/for-agents`, `/developers`, `/services`, `/trust`, `/privacy`, `/terms` without JavaScript | Done (Vitest + Playwright with JS disabled) |
-| `/v1/capabilities` from configured base URL | Done |
-| `/openapi.json` (OpenAPI 3.1 generated from the Zod schemas) | Done (route coverage + `$ref` resolution tested; live check script) |
-| `/health` minimal | Done |
-| `robots.txt`, `sitemap.xml`, canonical/meta tags, `llms.txt` | Done |
-| Security headers, CSP, HSTS flag | Done |
-| No hidden instructions or secrecy claims | Done (pattern test over all public documents) |
-| `.ca` alias redirect with private query stripping | Done (Worker-level; DNS is owner action) |
+- Request statuses keep the V1 set (`submitted`, `triaging`, ...) because changing the `capability_requests` CHECK would require a rebuild that D1 would cascade. Mapping to the master vocabulary is documented in REQUIREMENTS_RECONCILIATION; revisit in Phase 4 with a new column.
+- MCP tool arguments, including tokens, can appear in the calling client's logs. REST keeps tokens in headers.
+- Classification is keyword and alias based. No model call is made on agent text.
 
-## Phase 2: REST Agent Inbox
+## Approvals outstanding (spec 21.4)
 
-| Item | Status |
-|---|---|
-| `POST /v1/conversations` atomic create (conversation + first message + outbox) | Done |
-| 256-bit token, returned once, keyed HMAC digest only, constant-time compare | Done |
-| `GET/POST /v1/conversations/{id}/messages`, cursor pagination, idempotency, 409 conflict | Done |
-| `POST /v1/conversations/{id}/close` | Done |
-| Expiry (410), closed (409), blocked (403), message cap (409) | Done |
-| Thread isolation, enumeration resistance, auth-failure lockout | Done |
-| 100 parallel first contacts, quota exactness, unique IDs | Done |
-| Body caps, content-type, malformed JSON, invalid UTF-8, control chars, lone surrogates | Done |
-| Token and bodies absent from D1 plaintext and logs | Done |
+None of these have been done. Each needs the owner's explicit approval:
 
-## Phase 3: owner dashboard and notifications
-
-| Item | Status |
-|---|---|
-| Access JWT verification + allowlist, fails closed | Done (local keys; real Access **not verified**) |
-| CSRF protection on admin writes | Done |
-| Inbox: filters, POST search, pagination, columns per spec 10.2 | Done (API tests + browser) |
-| Conversation detail: plain-text thread, unverified claims, reply, private notes, priority, tags, reclassify, close/reopen, block/unblock, extend, revoke credential, export, delete | Done |
-| Request queue and detail: decisions, clarification, public vs private notes | Done |
-| Settings (intake toggle, retention, quotas, notifications) with paused banner | Done |
-| Audit list with filters and CSV export | Done |
-| Overview metrics with observed vs claimed separation, CSV aggregates | Done |
-| Notification outbox: retry/backoff, dead letter, suppression for blocked threads, coalescing, no content | Done |
-| Real email delivery (Resend / Cloudflare Email) | **Not verified** (code paths exist; provider default `none`) |
-
-## Phase 4: open-ended capability requests
-
-| Item | Status |
-|---|---|
-| Schema, REST endpoints, linked to thread | Done |
-| No category, novel category, location/deadline/budget validation, integer minor units | Done |
-| Idempotency (payload hash) and 409 | Done |
-| Active (10) and lifetime (30) caps | Done |
-| Review state machine, invalid transitions rejected | Done |
-| Clarification creates an agent-visible linked message atomically | Done |
-| Decline sets a public note; nothing scheduled; no payment/dispatch routes | Done |
-| Agent sees no internal notes/categories/tags | Done |
-| Agent-initiated withdraw | Not implemented (spec: optional later) |
-
-## Phase 5: remote MCP
-
-| Item | Status |
-|---|---|
-| Streamable HTTP at `POST /mcp`, official SDK v2, stateless | Done |
-| 7 tools sharing the REST services | Done |
-| 2026-07-28 negotiation and 2025 legacy fallback | Done (both eras, Vitest + real HTTP against `wrangler dev`) |
-| Origin, content type, size, method, malformed JSON-RPC, unsupported version | Done |
-| Third-party MCP clients (Claude Desktop/Code, others) | **Not verified** |
-
-## Phase 6: abuse, privacy, observability
-
-| Item | Status |
-|---|---|
-| Rate limits: per source, global, per thread, MCP, auth lockout, optional edge binding | Done |
-| Abuse events (short-lived, digest only) | Done |
-| Structured logs without bodies/tokens/IPs/full IDs | Done (log capture test + dev log grep) |
-| Retention job (grace period, holds, extensions, cascades, counters, audit) | Done |
-| Published retention values follow settings | Done |
-| Cron handlers | Done (Vitest scheduled controller + `wrangler dev` cron trigger) |
-
-## Phase 7: release package
-
-| Item | Status |
-|---|---|
-| Wrangler config for development/staging/production, dry-run bundles | Done (292 KiB gzip) |
-| Migrations apply locally | Done |
-| Migrations on remote D1 | **Not verified** (needs account) |
-| Staging deploy and live smoke tests | **Not verified** (needs account + approval) |
-| Registry `server.json` validated against official schema | Done (Ajv); `mcp-publisher` **not run** |
-| README, DEPLOYMENT_CHECKLIST, SECURITY, OPERATIONS, API/MCP/DATA_MODEL/PRIVACY docs, TEST_REPORT | Done |
-
-## Gap list
-
-1. Cloudflare account resources (D1 IDs, Access app, secrets, custom domains) do not exist yet.
-2. Email delivery untested against a real provider.
-3. Real Access JWT path (remote JWKS) untested; local tests use generated RS256 keys through the same `jwtVerify` code.
-4. Workers Rate Limiting binding behavior in production untested (binding is optional; app-level quotas are tested).
-5. No third-party MCP client tested yet.
-6. `mcp-publisher validate` not run; namespace `com.myhumanrep` needs DNS/HTTP verification at publish time.
-7. Swarmchasers reference not verified, so not cited publicly.
+- Cloudflare staging or production deploy, D1 remote migrations (`0003`-`0006` have never run remotely).
+- DNS and domain redirects; secret creation (`CONVERSATION_TOKEN_HMAC_KEY`, Access config).
+- Real email provider enablement.
+- MCP registry publish.
+- Any payment processor, live charge, worker recruitment or dispatch.

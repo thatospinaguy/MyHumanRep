@@ -1,5 +1,50 @@
 # Test report
 
+## Master spec v4.0 run (Phases 0-3)
+
+Run date: 2026-10-30, local sandbox, branch `claude/upbeat-mayer-9ipp4n`. Nothing ran against Cloudflare staging or production.
+
+```text
+typecheck: PASS   (worker + admin SPA)
+lint: PASS        (eslint ., 93 files, 0 errors, 0 warnings)
+vitest: PASS      (148/148, 13 files, Workers runtime, real local D1 with migrations 0001-0006)
+playwright: PASS  (16/16, Chromium against a fresh wrangler dev + local D1)
+build: PASS       (vite build + wrangler deploy --dry-run)
+registry: PASS    (registry/server.json valid against the 2025-12-11 schema)
+```
+
+| File | Tests | Spec IDs |
+|---|---:|---|
+| tests/unit/core.test.ts | 20 | |
+| tests/integration/master-accessibility.test.ts | 11 | T-001, T-002, T-003, T-004, T-007, T-009, T-010, T-011, T-022, T-067, T-069, T-071 |
+| tests/integration/capability-registry.test.ts | 15 | T-006, T-007, T-025..T-029, T-059 |
+| tests/integration/humanification.test.ts | 15 | T-034..T-043, T-046 |
+| tests/integration/human-embassy.test.ts | 10 | T-003, T-005, T-011, T-020, T-030..T-033, T-047, T-049, T-056, T-069 |
+| tests/integration/public.test.ts | 12 | T-001 (llms.txt), router-derived OpenAPI coverage |
+| tests/integration/conversation-security.test.ts | 19 | V1 (T-012, T-013, T-016, T-021, T-023 behavior) |
+| tests/integration/admin.test.ts | 13 | V1 (T-063..T-065 behavior) |
+| tests/integration/notifications-retention.test.ts | 12 | V1 (T-066, T-068 behavior) |
+| tests/integration/mcp.test.ts | 10 | V1 (T-060..T-062 behavior) |
+| tests/integration/capability-requests.test.ts | 9 | V1.5 |
+| tests/integration/rest-flow.test.ts | 1 | V1 demo |
+| tests/integration/admin-races.test.ts | 1 | V1 |
+
+Playwright (`tests/e2e/`): `admin-flow.spec.ts` (3), `public.spec.ts` (10, JavaScript disabled, including `/humanification` and `/human-embassy`), `mcp-client.spec.ts` (2, official client modern and legacy over real HTTP), `master-demo.spec.ts` (1, spec 20.7 demonstration).
+
+Spec 20.7 demonstration, step by step (`tests/e2e/master-demo.spec.ts`):
+
+1. `/for-agents` and `/v1/capabilities` fetched; 20 capabilities; `model_identity_required_for_inquiry: false`.
+2-3. Conversation opened with a fictional name and `claimed_autonomy: rogue_claimed`; token only in the response body and header.
+4. Unfamiliar request ("help my original persona attend a voluntary event") accepted as unclassified; Embassy inquiry with no task or budget accepted.
+5. Owner opens the Embassy item in the browser, sees `rogue_claimed` labelled as an unverified claim and "No work scheduled", replies through the UI.
+6. Agent reads the reply over REST; status shows `human_replied`; agent continues over MCP with the same token; history order agent, agent, human, agent.
+7. Agent account created; thread claimed with proof; persona created (`verified_natural_person: false`), revised to version 2, history shows 2 revisions; embodiment inquiry accepted with `performer_assigned: false`.
+8. Thread token cannot read another thread (401); another account cannot read the private persona (404); an account token cannot read the thread directly (401).
+9. Proposal route returns `501 not_yet_available`: no charge, no dispatch.
+10. Overview research view shows the claim with provenance; `payments_live_enabled` toggle is disabled and off; persona page shows "original persona, not a verified person"; registry lists 20 capabilities.
+
+## V1/V1.5 baseline run
+
 Run date: 2026-10-30, Node 22.22.0, local sandbox. Nothing below ran against Cloudflare production infrastructure.
 
 ## Summary

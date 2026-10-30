@@ -52,7 +52,9 @@ Verify:
 npx wrangler d1 execute MHR_DB --remote --env staging --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 ```
 
-Expected tables: `abuse_events, admin_audit, capability_requests, conversations, d1_migrations, messages, notification_outbox, rate_limit_counters, settings`.
+Expected tables: `abuse_events, admin_audit, agent_accounts, agent_personas, agent_self_reports, candidate_capabilities, capabilities, capability_aliases, capability_requests, conversation_account_links, conversations, d1_migrations, embassy_inquiries, messages, notification_outbox, persona_grants, persona_inquiries, persona_revisions, rate_limit_counters, settings`.
+
+Migrations `0003`-`0006` (master spec) have never run against a remote database. Take a D1 Time Travel bookmark before applying them. `0003` rebuilds `notification_outbox` only; every other change is additive. Then confirm `SELECT COUNT(*) FROM capabilities` returns 20.
 
 ## 3. Secrets
 

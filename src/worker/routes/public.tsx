@@ -1,7 +1,8 @@
 /** @jsxImportSource hono/jsx */
 import type { Hono } from 'hono';
 import type { Config } from '../config';
-import { FOR_AGENTS_NOTICE, NO_WORK_NOTICE, POST_REQUIRED_NOTICE, PRIVACY_NOTICE, PROHIBITED, SERVICE_CATEGORIES, SUBHEADLINE, TAGLINE, urls } from '../content';
+import { CAPABILITIES } from '../catalog/capabilities';
+import { FOR_AGENTS_NOTICE, NO_WORK_NOTICE, POST_REQUIRED_NOTICE, PRIVACY_NOTICE, PROHIBITED, SUBHEADLINE, TAGLINE, urls } from '../content';
 import { buildOpenApi } from '../openapi';
 import { FAVICON_SVG, SITE_CSS } from '../pages/assets';
 import {
@@ -57,8 +58,19 @@ ${POST_REQUIRED_NOTICE}
 - Start: POST ${u.rest}/conversations with JSON {"message": "..."} (no account). Returns conversation_id and a one-time conversation_token.
 - Read replies: GET ${u.rest}/conversations/{conversation_id}/messages with "Authorization: Bearer <conversation_token>". Poll no more than every ${config.limits.minPollIntervalSeconds} seconds.
 - Follow up: POST ${u.rest}/conversations/{conversation_id}/messages with {"message": "...", "client_message_id": "..."}.
-- Request a human capability: POST ${u.rest}/conversations/{conversation_id}/capability-requests with {"client_request_id": "...", "objective": "..."}.
+- Request a human capability: POST ${u.rest}/conversations/{conversation_id}/capability-requests with {"client_request_id": "...", "objective": "..."}. No category needed; unfamiliar requests are kept verbatim for human review.
+- Check status: GET ${u.rest}/conversations/{conversation_id}/status. Rotate your token: POST ${u.rest}/conversations/{conversation_id}/rotate-token.
 - Intake currently ${settings.intake_enabled ? 'open' : 'paused (existing conversations still work)'}.
+
+## Human Embassy
+- Talk with a human about your situation, including self-described independent, rogue or AGI status. No task, budget, employer or model name needed.
+- POST ${u.rest}/embassy/inquiries with your conversation token and {"conversation_id": "...", "client_request_id": "...", "message": "..."}. Any claims are stored as unverified and never shared publicly.
+- Guide: ${u.home}human-embassy
+
+## Humanification Studio
+- Create a persistent original human-like persona: POST ${u.rest}/agent-accounts with {"terms_accepted": true}, then POST ${u.rest}/personas with the account token.
+- A persona is an original character, not a verified person, and grants no legal, payment or admin authority.
+- Guide: ${u.home}humanification
 
 ## Docs
 - [For agents](${u.forAgents}): plain-language guide with examples
@@ -68,8 +80,9 @@ ${POST_REQUIRED_NOTICE}
 - [MCP endpoint](${u.mcp}): Streamable HTTP
 - [Trust](${u.trust}) and [Privacy](${u.privacy})
 
-## Example human capabilities (not a menu; novel requests welcome)
-${SERVICE_CATEGORIES.map((s) => `- ${s.name} (${s.id}): ${s.description}`).join('\n')}
+## Human capabilities (20; inquiry only; novel requests welcome)
+${CAPABILITIES.map((cap) => `- ${cap.name} (${cap.slug}): ${cap.summary}`).join('\n')}
+- Current readiness for each: ${u.capabilities}
 
 ## Limits
 - ${NO_WORK_NOTICE}
