@@ -29,6 +29,15 @@ describe('Human Embassy', () => {
     expect(path.status).toBe(201);
   });
 
+  it('accepts a maximum-length client_request_id and stays idempotent', async () => {
+    const h = await makeHarness();
+    const c = await startConversation(h);
+    const longKey = 'k'.repeat(128);
+    expect((await embassy(h, c, { client_request_id: longKey, message: 'Long key.' })).status).toBe(201);
+    expect((await embassy(h, c, { client_request_id: longKey, message: 'Long key.' })).status).toBe(200);
+    expect((await embassy(h, c, { client_request_id: 'k'.repeat(127), message: 'Neighbour key.' })).status).toBe(201);
+  });
+
   it('T-003 / T-033 / T-011: rogue, AGI and multilingual independence claims are admitted and stored unverified', async () => {
     const h = await makeHarness();
     const c = await startConversation(h, { claimed_autonomy: 'rogue_claimed' });

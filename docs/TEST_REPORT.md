@@ -7,7 +7,7 @@ Run date: 2026-10-30, local sandbox, branch `claude/upbeat-mayer-9ipp4n`. Nothin
 ```text
 typecheck: PASS   (worker + admin SPA)
 lint: PASS        (eslint ., 93 files, 0 errors, 0 warnings)
-vitest: PASS      (148/148, 13 files, Workers runtime, real local D1 with migrations 0001-0006)
+vitest: PASS      (150/150, 13 files, Workers runtime, real local D1 with migrations 0001-0006)
 playwright: PASS  (16/16, Chromium against a fresh wrangler dev + local D1)
 build: PASS       (vite build + wrangler deploy --dry-run)
 registry: PASS    (registry/server.json valid against the 2025-12-11 schema)
@@ -18,8 +18,8 @@ registry: PASS    (registry/server.json valid against the 2025-12-11 schema)
 | tests/unit/core.test.ts | 20 | |
 | tests/integration/master-accessibility.test.ts | 11 | T-001, T-002, T-003, T-004, T-007, T-009, T-010, T-011, T-022, T-067, T-069, T-071 |
 | tests/integration/capability-registry.test.ts | 15 | T-006, T-007, T-025..T-029, T-059 |
-| tests/integration/humanification.test.ts | 15 | T-034..T-043, T-046 |
-| tests/integration/human-embassy.test.ts | 10 | T-003, T-005, T-011, T-020, T-030..T-033, T-047, T-049, T-056, T-069 |
+| tests/integration/humanification.test.ts | 16 | T-034..T-043, T-046 |
+| tests/integration/human-embassy.test.ts | 11 | T-003, T-005, T-011, T-020, T-030..T-033, T-047, T-049, T-056, T-069 |
 | tests/integration/public.test.ts | 12 | T-001 (llms.txt), router-derived OpenAPI coverage |
 | tests/integration/conversation-security.test.ts | 19 | V1 (T-012, T-013, T-016, T-021, T-023 behavior) |
 | tests/integration/admin.test.ts | 13 | V1 (T-063..T-065 behavior) |

@@ -64,6 +64,15 @@ function inquiryView(r: Record<string, unknown>) {
   };
 }
 
+/**
+ * Message idempotency key derived from the inquiry key. Message keys share the 128-character limit,
+ * so keys that would overflow with the prefix are hashed under a distinct prefix.
+ */
+async function embassyMessageKey(clientRequestId: string): Promise<string> {
+  const key = `embassy:${clientRequestId}`;
+  return key.length <= 128 ? key : `embassy-sha256:${await sha256Hex(clientRequestId)}`;
+}
+
 async function assertPersonaInThread(ctx: ServiceContext, conversationId: string, personaId: string): Promise<void> {
   const ok = await ctx.db
     .prepare(
@@ -109,7 +118,7 @@ export async function createEmbassyInquiry(ctx: ServiceContext, conv: Conversati
   assertWritable(ctx, conv);
 
   // The inquiry text travels as an ordinary agent message (same validation, limits, idempotency).
-  const msg = await addAgentMessage(ctx, conv, { message: input.message, client_message_id: `embassy:${input.client_request_id}` });
+  const msg = await addAgentMessage(ctx, conv, { message: input.message, client_message_id: await embassyMessageKey(input.client_request_id) });
   const id = newId('emb');
   const now = iso(ctx.now);
   const statements: D1PreparedStatement[] = [

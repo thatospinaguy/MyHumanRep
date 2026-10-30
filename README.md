@@ -97,7 +97,7 @@ curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=*/5+*+*+*+*"
 npm run check
 ```
 
-That runs, in order: `typecheck` (worker + admin), `lint`, `test` (Vitest, 148 tests), `build` (admin SPA + Wrangler dry-run bundle), `validate:registry`.
+That runs, in order: `typecheck` (worker + admin), `lint`, `test` (Vitest, 150 tests), `build` (admin SPA + Wrangler dry-run bundle), `validate:registry`.
 
 ```bash
 npm run test:e2e

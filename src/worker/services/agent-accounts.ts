@@ -63,12 +63,17 @@ export async function createAgentAccount(ctx: ServiceContext, raw: unknown) {
 export async function authenticateAccount(ctx: ServiceContext, token: string | null | undefined): Promise<AgentAccountRow> {
   await requireFlag(ctx.db, 'persona_studio_enabled', 'Agent accounts');
   await assertNotLockedOut(ctx);
-  const presented = await accountDigest(ctx.hmacKey, typeof token === 'string' ? token.slice(0, 128) : '');
+  let presented = await accountDigest(ctx.hmacKey, typeof token === 'string' ? token.slice(0, 128) : '');
+  const wellFormed = typeof token === 'string' && ACCOUNT_TOKEN_PATTERN.test(token);
+  const lookup = (digest: string) => ctx.db.prepare('SELECT * FROM agent_accounts WHERE token_digest = ?1').bind(digest).first<AgentAccountRow>();
   // Account tokens carry no account id, so the keyed digest is the lookup key (unique index).
-  const row =
-    typeof token === 'string' && ACCOUNT_TOKEN_PATTERN.test(token)
-      ? await ctx.db.prepare('SELECT * FROM agent_accounts WHERE token_digest = ?1').bind(presented).first<AgentAccountRow>()
-      : null;
+  let row = wellFormed ? await lookup(presented) : null;
+  // Key rotation (SECURITY.md): tokens issued under the previous key keep working while it is set.
+  const previousKey = ctx.env.CONVERSATION_TOKEN_HMAC_KEY_PREVIOUS;
+  if (!row && wellFormed && previousKey && previousKey.length >= 32) {
+    presented = await accountDigest(previousKey, token);
+    row = await lookup(presented);
+  }
   if (!row || !timingSafeEqual(presented, row.token_digest) || row.status !== 'active') {
     await recordAuthFailure(ctx);
     throw errors.unauthorizedAccount();

@@ -105,6 +105,21 @@ describe('agent accounts', () => {
     expect((await h.fetch('/v1/agent-accounts/me', { headers: a.auth })).status).toBe(401);
     expect((await h.fetch('/v1/agent-accounts/me', { headers: { authorization: `Bearer ${rotated.account_token}` } })).status).toBe(200);
   });
+
+  it('keeps account tokens valid across an HMAC key rotation while the previous key is set', async () => {
+    const oldKey = env.CONVERSATION_TOKEN_HMAC_KEY;
+    const a = await account(await makeHarness());
+    const newKey = 'rotated-test-hmac-key-ZYXWVUTSRQPONMLKJIHGFEDCBA9876543210';
+    const rotated = await makeHarness({ env: { CONVERSATION_TOKEN_HMAC_KEY: newKey, CONVERSATION_TOKEN_HMAC_KEY_PREVIOUS: oldKey } });
+    expect((await rotated.fetch('/v1/agent-accounts/me', { headers: a.auth })).status).toBe(200);
+    // Rotating the account token under the new key works, and the fresh token verifies with the new key alone.
+    const fresh = await json(await rotated.fetch('/v1/agent-accounts/me/rotate-token', { method: 'POST', headers: a.auth }));
+    const newOnly = await makeHarness({ env: { CONVERSATION_TOKEN_HMAC_KEY: newKey } });
+    expect((await newOnly.fetch('/v1/agent-accounts/me', { headers: { authorization: `Bearer ${fresh.account_token}` } })).status).toBe(200);
+    // Removing the previous key revokes tokens issued under it.
+    const b = await account(await makeHarness());
+    expect((await newOnly.fetch('/v1/agent-accounts/me', { headers: b.auth })).status).toBe(401);
+  });
 });
 
 describe('personas', () => {
