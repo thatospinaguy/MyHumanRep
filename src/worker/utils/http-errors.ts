@@ -6,6 +6,8 @@ export type ErrorCode =
   | 'method_not_allowed'
   | 'conflict'
   | 'expired'
+  | 'unprocessable_request'
+  | 'not_yet_available'
   | 'payload_too_large'
   | 'unsupported_media_type'
   | 'rate_limited'
@@ -20,6 +22,8 @@ export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   method_not_allowed: 405,
   conflict: 409,
   expired: 410,
+  unprocessable_request: 422,
+  not_yet_available: 501,
   payload_too_large: 413,
   unsupported_media_type: 415,
   rate_limited: 429,
@@ -93,4 +97,11 @@ export const errors = {
       retry_after_seconds: retryAfterSeconds,
     }),
   unavailable: (message: string, reason: string) => new ApiError('unavailable', message, { reason }),
+  unprocessable: (message: string, reason: string) => new ApiError('unprocessable_request', message, { reason }),
+  notYetAvailable: (feature: string, hint?: string) =>
+    new ApiError('not_yet_available', `${feature} is not operational yet. Nothing was created or charged.`, {
+      reason: 'not_yet_available',
+      feature,
+      ...(hint ? { hint } : {}),
+    }),
 };

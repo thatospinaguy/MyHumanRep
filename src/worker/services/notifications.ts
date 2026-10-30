@@ -29,16 +29,32 @@ const EVENT_LABELS: Record<string, string> = {
   new_conversation: 'New agent inquiry',
   agent_message: 'New agent follow-up message',
   capability_request: 'New human capability request',
+  embassy_inquiry: 'New Human Embassy inquiry',
+  persona_inquiry: 'New persona embodiment or representation inquiry',
+  candidate_capability: 'New candidate capability to review',
 };
+
+/** Dashboard link: the conversation when there is one, otherwise the subject's admin page. */
+function alertPath(targetId: string, subjectType: string | null): string {
+  if (subjectType === 'candidate_capability') return '/admin/registry';
+  if (subjectType === 'persona') return `/admin/personas/${encodeURIComponent(targetId)}`;
+  return `/admin/conversations/${encodeURIComponent(targetId)}`;
+}
 
 /**
  * Builds an owner alert. By design it contains only the event type, time and
  * a link to the access-protected dashboard: never message bodies, sender
  * claims or credentials.
  */
-export function buildAlert(config: Config, eventType: string, conversationId: string, createdAt: string): OwnerAlert {
+export function buildAlert(
+  config: Config,
+  eventType: string,
+  targetId: string,
+  createdAt: string,
+  subjectType: string | null = null,
+): OwnerAlert {
   const label = EVENT_LABELS[eventType] ?? 'New activity';
-  const link = `${config.baseUrl}/admin/conversations/${encodeURIComponent(conversationId)}`;
+  const link = `${config.baseUrl}${alertPath(targetId, subjectType)}`;
   return {
     subject: `MyHumanRep: ${label}`,
     text: [
@@ -105,7 +121,9 @@ export function backoffMs(attempts: number): number {
 interface OutboxRow {
   id: string;
   event_type: string;
-  conversation_id: string;
+  conversation_id: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
   attempts: number;
   created_at: string;
   blocked_at: string | null;
@@ -143,8 +161,8 @@ export async function processOutbox(
 
   const { results } = await db
     .prepare(
-      `SELECT o.id, o.event_type, o.conversation_id, o.attempts, o.created_at, c.blocked_at
-       FROM notification_outbox o JOIN conversations c ON c.id = o.conversation_id
+      `SELECT o.id, o.event_type, o.conversation_id, o.subject_type, o.subject_id, o.attempts, o.created_at, c.blocked_at
+       FROM notification_outbox o LEFT JOIN conversations c ON c.id = o.conversation_id
        WHERE o.status = 'pending' AND o.not_before <= ?1 ORDER BY o.not_before ASC LIMIT ?2`,
     )
     .bind(nowIso, limit)
@@ -171,7 +189,7 @@ export async function processOutbox(
 
     const attempts = row.attempts + 1;
     try {
-      await mailer.send(buildAlert(config, row.event_type, row.conversation_id, row.created_at));
+      await mailer.send(buildAlert(config, row.event_type, row.conversation_id ?? row.subject_id ?? '', row.created_at, row.conversation_id ? null : row.subject_type));
       await finish(db, row.id, 'sent', attempts, null, nowIso);
       result.sent++;
     } catch (err) {

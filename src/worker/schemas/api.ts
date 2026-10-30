@@ -3,9 +3,14 @@ import { freeText, idempotencyKey, languageTag, shortLabel, text } from './field
 
 // ---------- Enums ----------
 
+/** V1 intents (stored in the CHECK-constrained legacy column). */
 export const INTENTS = ['general_inquiry', 'capability_request', 'research_question', 'other'] as const;
-export const Intent = z.enum(INTENTS).describe('Optional purpose of the conversation.');
+/** Master spec adds human_embassy and humanification; stored in `intent_label`. */
+export const INTENTS_EXTENDED = [...INTENTS, 'human_embassy', 'humanification'] as const;
+export type IntentExtended = (typeof INTENTS_EXTENDED)[number];
+export const Intent = z.enum(INTENTS_EXTENDED).describe('Optional purpose of the conversation.');
 
+/** V1 autonomy vocabulary (legacy column). Still accepted on input. */
 export const CLAIMED_AUTONOMY = [
   'unspecified',
   'operator_assisted',
@@ -13,9 +18,25 @@ export const CLAIMED_AUTONOMY = [
   'independent_claimed',
   'other',
 ] as const;
+/** Master spec (section 11.2) canonical autonomy self-report vocabulary. */
+export const AUTONOMY_CLAIMS = [
+  'not_stated',
+  'delegated_claimed',
+  'independent_claimed',
+  'rogue_claimed',
+  'agi_claimed',
+  'other_claimed',
+] as const;
+export type AutonomyClaim = (typeof AUTONOMY_CLAIMS)[number];
+export const ACCEPTED_AUTONOMY_VALUES = [...new Set([...AUTONOMY_CLAIMS, ...CLAIMED_AUTONOMY])] as [string, ...string[]];
 export const ClaimedAutonomy = z
-  .enum(CLAIMED_AUTONOMY)
-  .describe('Voluntary, unverified self-report. It never changes access or treatment.');
+  .union([
+    z.enum(ACCEPTED_AUTONOMY_VALUES),
+    shortLabel('Or describe it in your own words; stored as other_claimed with your text.'),
+  ])
+  .describe(
+    'Optional, voluntary, unverified self-report. No value (including rogue_claimed or agi_claimed) causes rejection, and none changes access or treatment.',
+  );
 
 export const CONVERSATION_STATUSES = [
   'open',
@@ -70,6 +91,7 @@ export const CreateConversationInput = z
     model_claim: shortLabel('Optional self-declared model or system. Unverified.').nullish(),
     subject: shortLabel('Optional short subject line.').nullish(),
     language: languageTag.nullish(),
+    preferred_language: languageTag.nullish(),
     intent: Intent.nullish(),
     claimed_autonomy: ClaimedAutonomy.nullish(),
     client_request_id: idempotencyKey(

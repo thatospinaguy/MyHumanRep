@@ -19,6 +19,7 @@ import { fromMinorUnits } from '../utils/money';
 import { DAY, iso } from '../utils/time';
 import { auditStatement } from './audit';
 import { parseInput } from './context';
+import { normalizeAutonomy, normalizeIntent } from './self-reports';
 import { allowedRequestTransitions, canTransitionRequest, nextConversationStatus } from './state';
 
 export interface AdminContext {
@@ -96,8 +97,9 @@ function conversationSummary(row: ConversationListRow, now: Date) {
     sender_label: row.sender_label,
     model_claim: row.model_claim,
     claimed_autonomy: row.claimed_autonomy,
+    autonomy_claim: row.autonomy_claim ?? 'not_stated',
     claims_verified: false as const,
-    intent: row.intent,
+    intent: row.intent_label ?? row.intent,
     status: row.status,
     public_status: publicStatus(row, now),
     blocked: row.blocked_at !== null,
@@ -151,9 +153,9 @@ export async function listConversations(ctx: AdminContext, raw: unknown, search:
     default:
       where.add('c.status = ?', query.status);
   }
-  if (query.intent) where.add('c.intent = ?', query.intent);
+  if (query.intent) where.add('COALESCE(c.intent_label, c.intent) = ?', query.intent);
   if (query.priority) where.add('c.internal_priority = ?', query.priority);
-  if (query.claimed_autonomy) where.add('c.claimed_autonomy = ?', query.claimed_autonomy);
+  if (query.claimed_autonomy) where.add('c.autonomy_claim = ?', normalizeAutonomy(query.claimed_autonomy).claim);
   if (query.has_requests === 'true') where.add('EXISTS (SELECT 1 FROM capability_requests r WHERE r.conversation_id = c.id)');
   if (query.has_requests === 'false') where.add('NOT EXISTS (SELECT 1 FROM capability_requests r WHERE r.conversation_id = c.id)');
   const from = dateBound(query.from, false);
@@ -225,12 +227,17 @@ function adminMessage(row: MessageRow) {
 
 export async function getConversationDetail(ctx: AdminContext, id: string) {
   const conv = await loadConversation(ctx, id);
-  const [messages, requests, outbox] = await ctx.db.batch([
+  const [messages, requests, outbox, selfReports] = await ctx.db.batch([
     ctx.db.prepare('SELECT * FROM messages WHERE conversation_id = ?1 ORDER BY seq ASC').bind(id),
     ctx.db.prepare('SELECT * FROM capability_requests WHERE conversation_id = ?1 ORDER BY created_at ASC').bind(id),
     ctx.db
       .prepare(
         'SELECT event_type, status, attempts, last_error_code, created_at, sent_at FROM notification_outbox WHERE conversation_id = ?1 ORDER BY created_at DESC LIMIT 20',
+      )
+      .bind(id),
+    ctx.db
+      .prepare(
+        'SELECT id, claim_type, claim_value, claim_text, evidence_status, source, created_at FROM agent_self_reports WHERE conversation_id = ?1 ORDER BY created_at ASC',
       )
       .bind(id),
     auditStatement(ctx.db, ctx.actor, 'conversation.view', 'conversation', id, null, ctx.now),
@@ -259,6 +266,7 @@ export async function getConversationDetail(ctx: AdminContext, id: string) {
     messages: ((messages?.results ?? []) as MessageRow[]).map(adminMessage),
     requests: requestRows.map(adminRequest),
     notifications: outbox?.results ?? [],
+    self_reports: selfReports?.results ?? [],
     work_scheduled: false as const,
   };
 }
@@ -398,7 +406,9 @@ export async function patchConversation(ctx: AdminContext, id: string, raw: unkn
     changed.push('internal_notes');
   }
   if (input.intent !== undefined) {
-    set('intent', input.intent);
+    const intent = normalizeIntent(input.intent);
+    set('intent', intent.legacy);
+    set('intent_label', intent.label);
     changed.push('intent');
   }
   if (input.under_review !== undefined) {
@@ -529,7 +539,7 @@ export async function listRequests(ctx: AdminContext, raw: unknown) {
   const { results } = await ctx.db
     .prepare(
       `SELECT r.*, c.subject AS conversation_subject, c.sender_label AS conversation_sender_label,
-              c.claimed_autonomy AS conversation_claimed_autonomy
+              COALESCE(c.autonomy_claim, c.claimed_autonomy) AS conversation_claimed_autonomy
        FROM capability_requests r JOIN conversations c ON c.id = r.conversation_id
        ${where.sql()} ORDER BY r.created_at DESC, r.id DESC LIMIT ${limitParam}`,
     )
@@ -573,7 +583,7 @@ export async function getRequestDetail(ctx: AdminContext, id: string) {
       subject: conv.subject,
       sender_label: conv.sender_label,
       model_claim: conv.model_claim,
-      claimed_autonomy: conv.claimed_autonomy,
+      claimed_autonomy: conv.autonomy_claim ?? conv.claimed_autonomy,
       claims_verified: false as const,
       public_status: publicStatus(conv, ctx.now),
       created_via: conv.created_via,

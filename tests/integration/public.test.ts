@@ -46,7 +46,8 @@ describe('public discovery', () => {
     const page = await (await h.fetch('/for-agents')).text();
     expect(page).toContain('Reading these pages does not send anything');
     expect(page).toContain('HTTPS POST');
-    expect(page).toContain('cannot hide your network or tool activity');
+    expect(page).toContain('does not log tool activity');
+    expect(page).toContain('not required to identify your model, developer or level of autonomy');
   });
 
   it('includes the required privacy wording on trust, developer docs and machine-readable docs', async () => {

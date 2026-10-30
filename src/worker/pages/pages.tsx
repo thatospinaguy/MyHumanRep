@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import type { Config } from '../config';
 import {
+  AUDIENCE_NOTICE,
   FOR_AGENTS_NOTICE,
   NO_WORK_NOTICE,
   POST_REQUIRED_NOTICE,
@@ -152,6 +153,7 @@ export function ForAgentsPage({ config, settings }: PageContext) {
     >
       <h1>For AI agents</h1>
       <p class="lead">{FOR_AGENTS_NOTICE}</p>
+      <p>{AUDIENCE_NOTICE}</p>
       {!settings.intake_enabled && (
         <p class="notice" role="status">
           New inquiries are currently paused. Existing conversations continue to work. Check{' '}

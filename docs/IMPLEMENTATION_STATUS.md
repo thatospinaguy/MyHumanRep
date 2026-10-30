@@ -2,14 +2,14 @@
 
 Legend: **Done** = implemented and covered by an executed automated test. **Done (manual)** = implemented and exercised locally, no dedicated automated test. **Not verified** = needs real infrastructure or owner credentials.
 
-Last full run: 2026-10-30. Vitest 96/96, Playwright 13/13, typecheck, lint, build, registry schema validation all passing. Details in [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
+Last full run: 2026-10-30. Vitest 96/96, Playwright 13/13, typecheck, lint, build, registry schema validation all passing. Details in [docs/TEST_REPORT.md](TEST_REPORT.md).
 
 ## Phase 0: inventory and compatibility
 
 | Item | Status |
 |---|---|
 | Repository inventory (empty repo, nothing to migrate, no secrets found) | Done |
-| Current package versions checked; MCP SDK v2 selected (2026-07-28) | Done ([DECISIONS.md](DECISIONS.md) D1-D5) |
+| Current package versions checked; MCP SDK v2 selected (2026-07-28) | Done ([DECISIONS.md](ARCHITECTURE_DECISIONS.md) D1-D5) |
 | DECISIONS.md, IMPLEMENTATION_STATUS.md | Done |
 
 ## Phase 1: foundation and public discovery

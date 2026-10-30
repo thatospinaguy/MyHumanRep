@@ -27,6 +27,8 @@ export interface ConversationRow {
   last_agent_message_at: string | null;
   last_human_message_at: string | null;
   last_agent_read_at: string | null;
+  autonomy_claim: string | null;
+  intent_label: string | null;
 }
 
 export interface MessageRow {

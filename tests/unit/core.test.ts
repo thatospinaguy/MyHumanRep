@@ -112,12 +112,16 @@ describe('input schemas', () => {
       { message: 'bell\u0007' },
       { message: 'bad \uD800 surrogate' },
       { message: 'ok', unexpected: 1 },
-      { message: 'ok', claimed_autonomy: 'rogue' },
       { message: 'ok', sender_label: 'two\nlines' },
       { message: 'ok', language: 'not a tag!' },
     ];
     for (const b of bad) expect(CreateConversationInput.safeParse(b).success, JSON.stringify(b).slice(0, 60)).toBe(false);
     expect(CreateConversationInput.safeParse({ message: 'x'.repeat(4000) }).success).toBe(true);
+    // ACC-02: self-descriptions are never a validation failure (V1 rejected 'rogue'; that was a contradiction).
+    for (const claimed_autonomy of ['rogue', 'rogue_claimed', 'agi_claimed', 'escaped AGI']) {
+      expect(CreateConversationInput.safeParse({ message: 'ok', claimed_autonomy }).success, claimed_autonomy).toBe(true);
+    }
+    expect(CreateConversationInput.safeParse({ message: 'ok', claimed_autonomy: 'two\nlines' }).success).toBe(false);
     expect(CreateConversationInput.safeParse({ message: 'tabs\tand\nnewlines\r\nok' }).success).toBe(true);
   });
   it('requires client_message_id on follow-ups', () => {

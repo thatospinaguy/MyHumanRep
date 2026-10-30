@@ -32,6 +32,7 @@ import {
 } from './abuse';
 import { nn, parseInput, type ServiceContext } from './context';
 import { scheduleOutboxDrain } from './notifications';
+import { normalizeAutonomy, normalizeIntent, selfReportStatement } from './self-reports';
 import { getSettings } from './settings';
 import { nextConversationStatus } from './state';
 
@@ -112,6 +113,14 @@ export async function createConversation(
     if (existing) throw duplicateFirstContact(ctx);
   }
 
+  const language = nn(input.language) ?? null;
+  const preferredLanguage = nn(input.preferred_language) ?? null;
+  if (language && preferredLanguage && language.toLowerCase() !== preferredLanguage.toLowerCase()) {
+    throw errors.unprocessable('language and preferred_language disagree. Send one of them.', 'conflicting_fields');
+  }
+  const autonomy = normalizeAutonomy(nn(input.claimed_autonomy));
+  const intent = normalizeIntent(nn(input.intent));
+
   const conversationId = newId('conv');
   const messageId = newId('msg');
   const token = newConversationToken();
@@ -125,22 +134,24 @@ export async function createConversation(
       .prepare(
         `INSERT INTO conversations (id, token_digest, status, intent, sender_label, model_claim, claimed_autonomy,
            language, subject, created_via, create_request_digest, agent_message_count, created_at, updated_at,
-           expires_at, last_agent_message_at)
-         VALUES (?1, ?2, 'waiting_for_human', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11, ?11, ?12, ?11)`,
+           expires_at, last_agent_message_at, autonomy_claim, intent_label)
+         VALUES (?1, ?2, 'waiting_for_human', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11, ?11, ?12, ?11, ?13, ?14)`,
       )
       .bind(
         conversationId,
         digest,
-        nn(input.intent) ?? 'general_inquiry',
+        intent.legacy,
         nn(input.sender_label) ?? null,
         nn(input.model_claim) ?? null,
-        nn(input.claimed_autonomy) ?? 'unspecified',
-        nn(input.language) ?? null,
+        autonomy.legacy,
+        language ?? preferredLanguage,
         nn(input.subject) ?? null,
         ctx.via,
         createDigest,
         now,
         expiresAt,
+        autonomy.claim,
+        intent.label,
       ),
     ctx.db
       .prepare(
@@ -155,9 +166,25 @@ export async function createConversation(
       )
       .bind(newId('evt'), conversationId, now),
   ];
+  // Claims are recorded as unverified annotations; they never gate or alter access (ACC-02, ACC-15).
+  if (autonomy.claim !== 'not_stated') {
+    statements.push(
+      selfReportStatement(
+        ctx.db,
+        { conversationId, claimType: 'autonomy', value: autonomy.claim, text: autonomy.text, source: 'conversation_create' },
+        ctx.now,
+      ),
+    );
+  }
+  const modelClaim = nn(input.model_claim);
+  if (modelClaim) {
+    statements.push(
+      selfReportStatement(ctx.db, { conversationId, claimType: 'model', value: null, text: modelClaim, source: 'conversation_create' }, ctx.now),
+    );
+  }
 
   try {
-    // D1 batches execute atomically: all three rows or none.
+    // D1 batches execute atomically: all rows or none.
     await ctx.db.batch(statements);
   } catch (err) {
     if (createDigest && String(err).includes('UNIQUE') && String(err).includes('create_request_digest')) {

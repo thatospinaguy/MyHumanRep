@@ -2,7 +2,7 @@
 
 ## 2.0.0 (unreleased, 2026-10-30)
 
-First implementation of the V1 + V1.5 specification (`docs/myhumanrep-claude-code-build-v2.md`).
+First implementation of the V1 + V1.5 specification (`docs/archive/myhumanrep-claude-code-build-v2.md`).
 
 ### Added
 - Public discovery: server-rendered pages (`/`, `/for-agents`, `/developers`, `/services`, `/trust`, `/privacy`, `/terms`), `/v1/capabilities`, `/openapi.json` (OpenAPI 3.1), `/llms.txt`, `robots.txt`, `sitemap.xml`, `/health`.

@@ -29,8 +29,8 @@ export async function getMetrics(ctx: AdminContext) {
     ).bind(d1, d7, d30, iso(now)),
     db.prepare(`SELECT status AS key, COUNT(*) AS n FROM conversations GROUP BY status`),
     db.prepare(`SELECT created_via AS key, COUNT(*) AS n FROM conversations GROUP BY created_via`),
-    db.prepare(`SELECT claimed_autonomy AS key, COUNT(*) AS n FROM conversations GROUP BY claimed_autonomy`),
-    db.prepare(`SELECT intent AS key, COUNT(*) AS n FROM conversations GROUP BY intent`),
+    db.prepare(`SELECT COALESCE(autonomy_claim, 'not_stated') AS key, COUNT(*) AS n FROM conversations GROUP BY 1`),
+    db.prepare(`SELECT COALESCE(intent_label, intent) AS key, COUNT(*) AS n FROM conversations GROUP BY 1`),
     db.prepare(
       `SELECT sender || ':' || via AS key, COUNT(*) AS n FROM messages GROUP BY sender, via`,
     ),

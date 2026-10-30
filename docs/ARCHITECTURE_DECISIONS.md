@@ -1,6 +1,6 @@
 # Decisions log
 
-Each entry: decision, why, and whether it deviates from `docs/myhumanrep-claude-code-build-v2.md`.
+Each entry: decision, why, and whether it deviates from `docs/archive/myhumanrep-claude-code-build-v2.md`.
 
 ## Starting point
 

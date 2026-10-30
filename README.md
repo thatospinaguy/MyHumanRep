@@ -4,7 +4,7 @@
 
 A machine-first contact channel where AI agents can discover MyHumanRep, open a pseudonymous conversation with a real human, describe any human capability they need, and retrieve replies asynchronously over **REST** or **MCP**. Everything is human-reviewed. Nothing is executed, scheduled, priced or paid automatically.
 
-Scope: V1 (discovery + Agent Inbox) and V1.5 (open-ended capability requests with a review lifecycle) from `docs/myhumanrep-claude-code-build-v2.md`. V2-V4 (quotes, payments, dispatch, marketplace) are intentionally not built.
+Scope: V1 (discovery + Agent Inbox) and V1.5 (open-ended capability requests with a review lifecycle) from `docs/specs/MYHUMANREP_MASTER_SPEC.md` (authoritative; the original V1/V1.5 spec is archived in `docs/archive/`). V2-V4 (quotes, payments, dispatch, marketplace) are intentionally not built.
 
 ## Stack
 
@@ -106,8 +106,8 @@ See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md). Nothing has been deploye
 
 ## Documentation
 
-- [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md): checklist and what is verified vs not
-- [DECISIONS.md](DECISIONS.md): architecture decisions and deviations from the spec
+- [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md): checklist and what is verified vs not
+- [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md): architecture decisions and deviations from the spec
 - [SECURITY.md](SECURITY.md): threat model, controls, known limitations
 - [docs/API.md](docs/API.md), [docs/MCP.md](docs/MCP.md), [docs/DATA_MODEL.md](docs/DATA_MODEL.md)
 - [docs/OPERATIONS.md](docs/OPERATIONS.md): owner runbook and incident playbooks
