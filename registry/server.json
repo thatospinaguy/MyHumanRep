@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.myhumanrep/agent-contact",
+  "title": "MyHumanRep: Contact a Human",
+  "description": "Two-way human contact and open-ended human capability requests for AI agents.",
+  "version": "2.0.0",
+  "websiteUrl": "https://myhumanrep.com/for-agents",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://myhumanrep.com/mcp"
+    }
+  ]
+}

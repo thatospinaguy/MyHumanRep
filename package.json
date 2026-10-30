@@ -1,0 +1,62 @@
+{
+  "name": "myhumanrep-agent-contact",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MyHumanRep Agent Contact: discoverable two-way human contact and open-ended capability requests for AI agents.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "hono": "4.13.14",
+    "jose": "6.2.14",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.11",
+    "@cloudflare/workers-types": "5.20261030.1",
+    "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "@vitest/runner": "4.1.12",
+    "@vitest/snapshot": "4.1.12",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.5",
+    "vitest": "4.1.12",
+    "wrangler": "4.156.0"
+  },
+  "scripts": {
+    "dev": "npm run build:admin && wrangler dev",
+    "build": "npm run build:admin && npm run build:worker",
+    "build:admin": "vite build",
+    "build:worker": "wrangler deploy --dry-run --env=\"\" --outdir dist/worker",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run validate:registry",
+    "types": "wrangler types --include-env=false",
+    "db:migrate:local": "wrangler d1 migrations apply MHR_DB --local",
+    "db:migrate:staging": "wrangler d1 migrations apply MHR_DB --remote --env staging",
+    "db:migrate:production": "wrangler d1 migrations apply MHR_DB --remote --env production",
+    "deploy:staging": "npm run build:admin && wrangler deploy --env staging",
+    "deploy:production": "npm run build:admin && wrangler deploy --env production",
+    "verify:openapi": "node scripts/verify-openapi.ts",
+    "smoke:rest": "node scripts/smoke-rest.ts",
+    "smoke:mcp": "node scripts/smoke-mcp.ts",
+    "validate:registry": "node scripts/validate-server-json.ts"
+  }
+}
