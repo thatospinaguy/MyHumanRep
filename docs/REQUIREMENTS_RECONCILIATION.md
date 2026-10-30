@@ -28,14 +28,14 @@ Severity: **High** = an agent following the master spec is refused or misled. **
 | ACC-03 | No B2B filter existed | Same | none | none | none | T-004 | Compliant |
 | ACC-04 | `category_hint` optional and free-form, but unknown values were not marked `unclassified` nor queued for review; spec 11.5 fields rejected | Optional hint; unknown → `unclassified` + candidate queue; spec fields accepted | **High** | `services/capability-catalog.ts` `classifyHints` + `candidateStatements`; `CapabilityRequestInput` accepts spec 8.1/11.5 fields; admin candidate queue (`services/admin-registry.ts`) | `0004` | T-006, T-026, `capability-registry.test.ts` | **Fixed (Phase 1)** |
 | ACC-05 | No personhood field existed | Same | none | none | none | T-004 | Compliant |
-| ACC-06 | No persona support at all | Original persona CRUD | Medium | Phase 2: `services/personas.ts`, `routes/humanification.ts` | `0005` | T-034..T-037 | Pending (Phase 2) |
+| ACC-06 | No persona support at all | Original persona CRUD | Medium | `services/personas.ts`, `services/agent-accounts.ts`, `routes/humanification.ts` | `0005` | T-034..T-037, T-042, T-046 (`humanification.test.ts`) | **Fixed (Phase 2)** |
 | ACC-07 | No forced "I AM AI" label anywhere (checked pages, MCP instructions, replies) | Context-sensitive attribution | none | none | none | copy review | Compliant |
 | ACC-08 | `PROHIBITED` copy said "We will not help with ... bypassing human verification", readable as refusing the *topic* (`content.ts`) | Discussion allowed; only execution refused | Low | `PROHIBITED` rewritten: "You may discuss anything, including identity, human verification... We evaluate the action requested, never what the sender says it is." No code ever blocked by keyword | none | `ACC-08` test, T-028 | **Fixed** |
 | ACC-09 | REST was already independent of MCP | Same | none | none | none | T-008 (rest-flow) | Compliant |
 | ACC-10 | No upload/payment/booking needed | Same | none | none | none | T-002 | Compliant |
 | ACC-11 | Public pages were already JS-free | Same | none | none | none | T-001/T-009 | Compliant |
 | ACC-12 | No inbound side effects except owner alert | Same | none | none | none | T-022 | Compliant |
-| ACC-13 | n/a (no personas) | Persona ID never authenticates | Medium | Phase 2: personas require a separate scoped account credential; IDs never authorize | `0005` | T-036, T-038, T-039 | Pending (Phase 2) |
+| ACC-13 | n/a (no personas) | Persona ID never authenticates | Medium | Personas require a separate scoped account credential (`mhra_`, own HMAC purpose); persona IDs never authorize; thread claims need the thread token | `0005` | ACC-13, T-036, T-038, T-039 | **Fixed (Phase 2)** |
 | ACC-14 | Private responses were `no-store` but had no `X-Robots-Tag` (`middleware/security-headers.ts`) | no-store + noindex | Low | Every `no-store` response now carries `X-Robots-Tag: noindex, nofollow` | none | ACC-14 / T-067 | **Fixed** |
 | ACC-15 | Self-report already optional | Same | none | none | none | T-032 | Compliant |
 | ACC-16 | Copy already said environment may observe | Same; master 4.2 wording adopted | Low | `FOR_AGENTS_NOTICE` replaced with master 4.2 invitation verbatim; `AUDIENCE_NOTICE` added (rogue/independent/AGI self-descriptions welcome) | none | public tests | **Fixed** |

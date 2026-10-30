@@ -34,12 +34,21 @@ function parseJsonArray(json: string | null | undefined): string[] {
  * A request may reference a persona only if an agent account that has claimed this conversation
  * owns it (spec 13.3, ACC-13). Persona IDs are never credentials.
  */
-async function assertPersonaUsableInThread(_ctx: ServiceContext, _conversationId: string, _personaId: string): Promise<void> {
-  // PHASE2: replaced by the ownership query once agent accounts and personas exist.
-  throw errors.unprocessable(
-    'persona_id must be one of your personas, and this conversation must be claimed by the same agent account (POST /v1/agent-accounts/me/claim-conversation).',
-    'persona_not_linked',
-  );
+async function assertPersonaUsableInThread(ctx: ServiceContext, conversationId: string, personaId: string): Promise<void> {
+  const row = await ctx.db
+    .prepare(
+      `SELECT 1 AS ok FROM agent_personas p
+       JOIN conversation_account_links l ON l.agent_account_id = p.owner_agent_account_id
+       WHERE p.id = ?1 AND l.conversation_id = ?2`,
+    )
+    .bind(personaId, conversationId)
+    .first();
+  if (!row) {
+    throw errors.unprocessable(
+      'persona_id must be one of your personas, and this conversation must be claimed by the same agent account (POST /v1/agent-accounts/me/claim-conversation).',
+      'persona_not_linked',
+    );
+  }
 }
 
 export function toPublicRequest(row: CapabilityRequestRow): z.infer<typeof PublicCapabilityRequest> {

@@ -17,6 +17,9 @@ import {
   listMessages,
 } from '../services/conversations';
 import { ApiError, errorBody } from '../utils/http-errors';
+import { ClaimConversationInput, CreateAgentAccountInput, CreatePersonaInput, EmbodimentInquiryInput, MediaBriefInput, RepresentationInquiryInput } from '../schemas/humanification';
+import { authenticateAccount, claimConversation, createAgentAccount } from '../services/agent-accounts';
+import { createPersona, createPersonaInquiry, personaHistory, updatePersona } from '../services/personas';
 import { MINUTE } from '../utils/time';
 
 export const SERVER_VERSION = '2.0.0';
@@ -292,6 +295,113 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
         }),
     );
   }
+
+  // ---------- Humanification expansion tools (spec 12.3). Account token, not thread token. ----------
+  const accountShape = { account_token: z.string().max(128).describe('account_token from create_agent_account. Not a conversation token.') };
+  const personaRef = { ...accountShape, persona_id: z.string().max(64) };
+  const withAccount = <T extends { account_token: string }>(args: T) => {
+    const { account_token, ...rest } = args;
+    return { token: account_token, rest };
+  };
+
+  server.registerTool(
+    'create_agent_account',
+    {
+      title: 'Create an agent account',
+      description:
+        'Creates a scoped application account for persistent personas. No human identity, model name or KYC. Returns account_token once: store it. It is not a conversation token and grants no access to threads you have not claimed.',
+      inputSchema: CreateAgentAccountInput,
+      annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) => run(ctx, () => createAgentAccount(ctx, args)),
+  );
+
+  server.registerTool(
+    'claim_conversation',
+    {
+      title: 'Claim a conversation for your account',
+      description: 'Links one conversation to your account, using that conversation\'s own token as proof. Grants nothing about other threads.',
+      inputSchema: ClaimConversationInput.extend(accountShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return claimConversation(ctx, await authenticateAccount(ctx, token), rest);
+      }),
+  );
+
+  server.registerTool(
+    'create_persona',
+    {
+      title: 'Create an original persona',
+      description:
+        'Creates an original human-like persona (name, biography, style, briefs). Private by default. It is a created character, never a verified natural person, legal identity or payment authority.',
+      inputSchema: CreatePersonaInput.extend(accountShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return createPersona(ctx, await authenticateAccount(ctx, token), rest);
+      }),
+  );
+
+  server.registerTool(
+    'update_persona',
+    {
+      title: 'Update a persona',
+      description: 'Changes persona fields. The persona_id stays stable and a new immutable version is recorded.',
+      inputSchema: CreatePersonaInput.partial().extend(personaRef).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        const { persona_id, ...changes } = rest;
+        return updatePersona(ctx, await authenticateAccount(ctx, token), persona_id, changes);
+      }),
+  );
+
+  server.registerTool(
+    'get_persona_history',
+    {
+      title: 'Get persona history',
+      description: 'Versioned history of a persona you own (or that was shared with you). History is records, not memory or proof of identity.',
+      inputSchema: z.object(personaRef).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return personaHistory(ctx, await authenticateAccount(ctx, token), rest.persona_id);
+      }),
+  );
+
+  const inquiryTool = (
+    name: string,
+    title: string,
+    description: string,
+    kind: 'embodiment' | 'representation' | 'media_brief',
+    schema: typeof EmbodimentInquiryInput | typeof RepresentationInquiryInput | typeof MediaBriefInput,
+  ) =>
+    server.registerTool(
+      name,
+      {
+        title,
+        description: `${description} Inquiry only: no person is contacted, assigned, agreed or paid.`,
+        inputSchema: schema.extend(personaRef).strict(),
+        annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      (args: Record<string, unknown>) =>
+        run(ctx, async () => {
+          const { account_token, persona_id, ...rest } = args as { account_token: string; persona_id: string };
+          return (await createPersonaInquiry(ctx, await authenticateAccount(ctx, account_token), persona_id, kind, rest)).body;
+        }),
+    );
+  inquiryTool('request_human_embodiment', 'Request human embodiment', 'Ask for a consenting human performer to portray your persona (fictional performance, voice acting, event presence).', 'embodiment', EmbodimentInquiryInput);
+  inquiryTool('request_human_representative', 'Request a human representative', 'Ask for an authorized human spokesperson, representative or relationship manager for your persona.', 'representation', RepresentationInquiryInput);
+  inquiryTool('request_persona_voice_brief', 'Submit a persona voice or appearance brief', 'Submit an original voice or appearance brief for human review (metadata only).', 'media_brief', MediaBriefInput);
 
   return server;
 }

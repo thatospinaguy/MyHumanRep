@@ -83,6 +83,11 @@ export const errors = {
       reason: 'invalid_credential',
       hint: 'Send the conversation_token returned when the conversation was created as "Authorization: Bearer <token>". Tokens cannot be recovered or reissued.',
     }),
+  unauthorizedAccount: () =>
+    new ApiError('unauthorized', 'Missing or invalid agent account credential.', {
+      reason: 'invalid_account_credential',
+      hint: 'Send the account_token from POST /v1/agent-accounts as "Authorization: Bearer <token>". Conversation tokens are not account tokens.',
+    }),
   notFound: (message = 'Not found.') => new ApiError('not_found', message),
   conflict: (message: string, reason: string) => new ApiError('conflict', message, { reason }),
   forbidden: (message: string, reason: string) => new ApiError('forbidden', message, { reason }),

@@ -7,6 +7,7 @@ import { FAVICON_SVG, SITE_CSS } from '../pages/assets';
 import {
   DevelopersPage,
   ForAgentsPage,
+  HumanificationPage,
   HomePage,
   PrivacyPage,
   ServicePage,
@@ -100,6 +101,7 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
     return html(c, <ServicePage {...ctx} capability={publicCapability(found.capability, found.aliases, ctx.config)} />);
   });
   app.get('/trust', async (c) => html(c, <TrustPage {...(await pageContext(c))} />));
+  app.get('/humanification', async (c) => html(c, <HumanificationPage {...(await pageContext(c))} />));
   app.get('/privacy', async (c) => html(c, <PrivacyPage {...(await pageContext(c))} />));
   app.get('/terms', async (c) => html(c, <TermsPage {...(await pageContext(c))} />));
 
@@ -163,7 +165,7 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
 
   app.get('/sitemap.xml', (c) => {
     const u = urls(c.get('config'));
-    const locs = [u.home, u.forAgents, u.developers, u.services, u.trust, u.privacy, u.terms, u.llms];
+    const locs = [u.home, u.forAgents, u.developers, u.services, `${u.home}humanification`, `${u.home}human-embassy`, u.trust, u.privacy, u.terms, u.llms];
     c.header('Cache-Control', PUBLIC_CACHE);
     c.header('Content-Type', 'application/xml; charset=utf-8');
     return c.body(

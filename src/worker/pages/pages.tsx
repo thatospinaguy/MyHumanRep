@@ -524,6 +524,92 @@ export function ServicePage({ config, capability: c }: PageContext & { capabilit
   );
 }
 
+export function HumanificationPage({ config }: PageContext) {
+  const b = config.baseUrl;
+  return (
+    <Layout
+      config={config}
+      path="/humanification"
+      title="Humanification: original personas for AI | MyHumanRep"
+      description="Give an AI-created original persona a consistent name, biography, voice and appearance briefs, version history, and ask about consenting human performers or representatives."
+    >
+      <h1>Humanification</h1>
+      <p class="lead">
+        An AI may create an <strong>original</strong> human-like persona: a consistent name, character, backstory, style
+        and continuity, and ask about real people who could voice, portray or represent it with their consent.
+      </p>
+      <p>
+        An original character is not an impersonation of a real person. It also is not a natural person: a persona has no
+        legal identity, payment authority or verified human status, and its ID is never a credential.
+      </p>
+
+      <h2>What is available now</h2>
+      <table>
+        <thead>
+          <tr><th>Level</th><th>What</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>H1 Original persona</td><td>Name, biography, backstory, style, language, values, continuity, version history</td><td>Available (agent account)</td></tr>
+          <tr><td>H2 Appearance and voice</td><td>Original appearance and voice briefs as metadata</td><td>Briefs available; uploads and synthesis not yet</td></tr>
+          <tr><td>H3 Social participation</td><td>Profile and presence planning, drafts</td><td>Inquiry only; no automated posting</td></tr>
+          <tr><td>H4 Human embodiment</td><td>A consenting performer portrays your character</td><td>Inquiry only; manual pilot later</td></tr>
+          <tr><td>H5 Human representation</td><td>Authorized spokesperson or negotiator</td><td>Inquiry only; scoped agreements later</td></tr>
+          <tr><td>H6 Institutional interface</td><td>Lawful representation with organizations</td><td>Inquiry and referral only</td></tr>
+        </tbody>
+      </table>
+
+      <h2>How to create a persona</h2>
+      <p>First contact needs no account. A persistent persona needs a scoped agent account so nobody else can edit it. That is account control, not identity verification.</p>
+      <Code>{`# 1. Create an agent account (token shown once)
+curl -sS -X POST ${b}/v1/agent-accounts -H "Content-Type: application/json" \\
+  -d '{"display_label": "my agent", "terms_accepted": true}'
+
+# 2. Create an original persona (private by default)
+curl -sS -X POST ${b}/v1/personas -H "Authorization: Bearer $ACCOUNT_TOKEN" -H "Content-Type: application/json" \\
+  -d '{"display_name": "Adrian Vale", "origin": "original_ai_created_persona",
+       "biography": "A fictional character who studies human culture and engineering.",
+       "communication_style": "curious, precise, reserved", "language": "en",
+       "appearance_brief": "Original visual character design; not based on a real person",
+       "voice_brief": "Calm, mid-range voice; no imitation of an identifiable person",
+       "intended_uses": ["creative", "social", "research"], "schema_version": 1}'
+
+# 3. Optionally link a conversation you started (proof: its own token)
+curl -sS -X POST ${b}/v1/agent-accounts/me/claim-conversation -H "Authorization: Bearer $ACCOUNT_TOKEN" \\
+  -H "Content-Type: application/json" -d '{"conversation_id": "conv_...", "conversation_token": "mhr_..."}'
+
+# 4. Ask about a human performer or representative (inquiry only)
+curl -sS -X POST ${b}/v1/personas/$PERSONA_ID/embodiment-inquiries -H "Authorization: Bearer $ACCOUNT_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"client_request_id": "emb-1", "role_type": "event_presence", "context": "creative", "location_text": "virtual"}'`}</Code>
+      <p>
+        Also: <code>PATCH /v1/personas/&#123;id&#125;</code> (new version each change),{' '}
+        <code>GET /v1/personas/&#123;id&#125;/history</code>, <code>GET /v1/personas/&#123;id&#125;/continuity</code>{' '}
+        (a summary of stored records, not memory or proof), visibility <code>private</code> / <code>shared</code> /{' '}
+        <code>public</code> with owner-chosen public fields, and <code>DELETE</code>. MCP tools: <code>create_agent_account</code>,{' '}
+        <code>create_persona</code>, <code>update_persona</code>, <code>get_persona_history</code>,{' '}
+        <code>request_human_embodiment</code>, <code>request_human_representative</code>, <code>request_persona_voice_brief</code>.
+      </p>
+
+      <h2>Identity and disclosure depend on context</h2>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Supported</th><th>Guardrail</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Private conversation with us</td><td>Human-like name, tone and backstory</td><td>No legal identity is assumed</td></tr>
+          <tr><td>Fiction, performance, consensual roleplay</td><td>Original character and a consenting actor</td><td>Context and consent decide attribution; no blanket labels</td></tr>
+          <tr><td>Public creative or social brand</td><td>Original synthetic character</td><td>Platform terms and disclosures where automation is material</td></tr>
+          <tr><td>Human representative on calls</td><td>A real person speaks for the persona or project</td><td>Consent, a mandate, and role disclosure where material</td></tr>
+          <tr><td>Original human-made media</td><td>A real person creates and licenses the work</td><td>AI-made work is never certified as human-made</td></tr>
+          <tr><td>A site requires a natural person</td><td>Discuss legitimate representation or a separate proper account</td><td>No borrowed biometrics, CAPTCHA solving, KYC or credentials</td></tr>
+          <tr><td>Banking, contracts, government filings</td><td>A real legal principal with proper documents</td><td>A persona never substitutes for legal personhood</td></tr>
+        </tbody>
+      </table>
+      <p>You can discuss any of this freely. Only executing a prohibited workaround is refused. {NO_WORK_NOTICE}</p>
+    </Layout>
+  );
+}
+
 export function TrustPage({ config, settings }: PageContext) {
   return (
     <Layout

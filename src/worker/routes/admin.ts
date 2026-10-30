@@ -21,6 +21,13 @@ import { parseInput } from '../services/context';
 import { getMetrics, metricsToCsvRows } from '../services/metrics';
 import { getSettings, SettingsPatchSchema, settingsUpsertStatements } from '../services/settings';
 import { MetricsQuery } from '../schemas/admin';
+import {
+  deletePersonaAdmin,
+  getPersonaAdmin,
+  listPersonaInquiriesAdmin,
+  listPersonasAdmin,
+  patchPersonaInquiry,
+} from '../services/admin-humanification';
 import { decideCandidate, listCandidates, listRegistryAdmin, patchCapability } from '../services/admin-registry';
 import { FeatureFlagsPatch, flagsUpsertStatement, getFeatureFlags, moduleReadiness, type FeatureFlags } from '../services/feature-flags';
 import { readJsonBody } from '../utils/body';
@@ -180,6 +187,13 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.post('/admin/api/candidate-capabilities/:id/decision', async (c) =>
     c.json(await decideCandidate(adminCtx(c), c.req.param('id'), await body(c))),
   );
+
+  // Humanification (master spec Phase 2). The owner reviews; persona content stays agent-owned.
+  app.get('/admin/api/personas', async (c) => c.json(await listPersonasAdmin(adminCtx(c), c.req.query('visibility'))));
+  app.get('/admin/api/personas/:id', async (c) => c.json(await getPersonaAdmin(adminCtx(c), c.req.param('id'))));
+  app.delete('/admin/api/personas/:id', async (c) => c.json(await deletePersonaAdmin(adminCtx(c), c.req.param('id'), await body(c))));
+  app.get('/admin/api/persona-inquiries', async (c) => c.json(await listPersonaInquiriesAdmin(adminCtx(c), c.req.query('status'))));
+  app.patch('/admin/api/persona-inquiries/:id', async (c) => c.json({ inquiry: await patchPersonaInquiry(adminCtx(c), c.req.param('id'), await body(c)) }));
 
   app.all('/admin/api/*', () => {
     throw new ApiError('not_found', 'Unknown admin endpoint.');
