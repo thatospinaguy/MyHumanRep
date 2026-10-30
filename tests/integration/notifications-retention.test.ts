@@ -193,6 +193,28 @@ describe('retention', () => {
     expect(counters!.n).toBe(0);
   });
 
+  it('applies the configured abuse retention, shorter or longer than the default', async () => {
+    const h = await makeHarness();
+    const config = loadConfig({ ...env, ...h.envOverrides } as unknown as Env);
+    const count = async () => (await env.MHR_DB.prepare('SELECT COUNT(*) AS n FROM abuse_events').first<{ n: number }>())!.n;
+
+    await h.admin('/admin/api/settings', { method: 'PATCH', json: { abuse_retention_days: 1 } });
+    await h.fetch('/v1/conversations', { method: 'POST', json: { message: 'hi', bogus: 1 } });
+    await h.fetch('/v1/conversations/conv_AAAAAAAAAAAAAAAAAAAAAA/messages', { headers: { authorization: 'Bearer x' } });
+    expect(await count()).toBeGreaterThan(0);
+    h.clock.advance(2 * DAY);
+    await runRetention(env.MHR_DB, config, h.clock.now());
+    expect(await count()).toBe(0);
+
+    await h.admin('/admin/api/settings', { method: 'PATCH', json: { abuse_retention_days: 30 } });
+    await h.fetch('/v1/conversations/conv_AAAAAAAAAAAAAAAAAAAAAA/messages', { headers: { authorization: 'Bearer x' } });
+    const kept = await count();
+    expect(kept).toBeGreaterThan(0);
+    h.clock.advance(10 * DAY);
+    await runRetention(env.MHR_DB, config, h.clock.now());
+    expect(await count()).toBe(kept);
+  });
+
   it('publishes retention values that match the configured settings', async () => {
     const h = await makeHarness();
     await h.admin('/admin/api/settings', { method: 'PATCH', json: { conversation_ttl_days: 12, expired_grace_days: 3 } });

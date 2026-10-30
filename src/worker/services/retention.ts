@@ -20,13 +20,15 @@ export async function runRetention(db: D1Database, config: Config, now: Date): P
   const settings = await getSettings(db, config);
   const conversationCutoff = iso(new Date(now.getTime() - settings.expired_grace_days * DAY));
   const auditCutoff = iso(new Date(now.getTime() - settings.audit_retention_days * DAY));
+  const abuseCutoff = iso(new Date(now.getTime() - settings.abuse_retention_days * DAY));
   const outboxCutoff = iso(new Date(now.getTime() - 30 * DAY));
   const nowIso = iso(now);
 
   const results = await db.batch([
     // RETURNING gives an exact count; meta.changes would include cascaded child rows.
     db.prepare('DELETE FROM conversations WHERE expires_at <= ?1 AND retention_hold = 0 RETURNING id').bind(conversationCutoff),
-    db.prepare('DELETE FROM abuse_events WHERE expires_at <= ?1').bind(nowIso),
+    // Uses the current setting, so changing abuse_retention_days applies to existing events too.
+    db.prepare('DELETE FROM abuse_events WHERE created_at < ?1').bind(abuseCutoff),
     db.prepare('DELETE FROM rate_limit_counters WHERE expires_at <= ?1').bind(nowIso),
     db.prepare('DELETE FROM admin_audit WHERE created_at < ?1').bind(auditCutoff),
     db

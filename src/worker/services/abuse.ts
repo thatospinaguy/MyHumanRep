@@ -16,7 +16,11 @@ export type AbuseCategory =
   | 'rejected_invalid'
   | 'duplicate_first_contact';
 
-/** Record a short-lived, non-identifying abuse signal. Best effort; never blocks the response. */
+/**
+ * Record a short-lived, non-identifying abuse signal. Best effort; never blocks the response.
+ * `expires_at` is a default hint only: the retention job deletes by `created_at` using the
+ * owner's current `abuse_retention_days` setting.
+ */
 export function recordAbuse(ctx: ServiceContext, category: AbuseCategory, retentionDays = 7): void {
   const stmt = ctx.db
     .prepare(

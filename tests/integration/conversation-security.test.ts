@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { encodeCursor } from '../../src/worker/services/conversations';
 import { DAY } from '../../src/worker/utils/time';
 import { json, makeHarness, startConversation } from '../helpers';
 
@@ -217,6 +218,28 @@ describe('conversation credentials and isolation', () => {
     expect(tooBig.status).toBe(400);
     const unknownParam = await h.fetch(`/v1/conversations/${a.conversation_id}/messages?conversation_id=${b.conversation_id}`, { headers: a.auth });
     expect(unknownParam.status).toBe(400);
+  });
+
+  it('marks only messages in the returned page as delivered, even when a cursor skips ahead', async () => {
+    const h = await makeHarness();
+    const c = await startConversation(h);
+    for (const m of ['first human', 'second human']) {
+      await h.admin(`/admin/api/conversations/${c.conversation_id}/reply`, { method: 'POST', json: { message: m } });
+    }
+    // seq 1 = agent, 2 = first human, 3 = second human. Skip straight past seq 2.
+    const page = await json(
+      await h.fetch(`/v1/conversations/${c.conversation_id}/messages?after=${encodeCursor(2)}`, { headers: c.auth }),
+    );
+    expect(page.messages.map((m: { body: string }) => m.body)).toEqual(['second human']);
+    const { results } = await env.MHR_DB.prepare(
+      "SELECT seq, delivered_at FROM messages WHERE conversation_id = ?1 AND sender = 'human' ORDER BY seq",
+    )
+      .bind(c.conversation_id)
+      .all<{ seq: number; delivered_at: string | null }>();
+    expect(results.map((r) => [r.seq, r.delivered_at !== null])).toEqual([
+      [2, false],
+      [3, true],
+    ]);
   });
 
   it('makes follow-ups idempotent and rejects conflicting replays', async () => {

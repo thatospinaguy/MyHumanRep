@@ -14,7 +14,7 @@ Verified locally:
 - typecheck: PASS   (tsc -p tsconfig.json && tsc -p tsconfig.web.json)
 - lint: PASS        (eslint ., 61 files, 0 warnings)
 - unit: PASS        (20 tests, Vitest on the Workers runtime)
-- integration: PASS (73 tests, Vitest on the Workers runtime with real local D1 + migrations)
+- integration: PASS (75 tests, Vitest on the Workers runtime with real local D1 + migrations)
 - UI e2e: PASS      (13 tests, Playwright Chromium against wrangler dev + local D1)
 - MCP compatibility: PASS (official TS client 2.4.0: modern 2026-07-28 and legacy 2025, in-process and over real HTTP)
 - build: PASS       (vite build; wrangler deploy --dry-run for development, staging and production configs; 291.7 KiB gzip)
@@ -108,8 +108,10 @@ BASE_URL=http://localhost:8787 node scripts/verify-openapi.ts
 1. Admin SQL builder re-substituted already-numbered placeholders when a clause had several parameters (broke cursor pagination). Fixed in `services/admin.ts` (`Where.add`).
 2. Retention reported cascaded child rows as deleted conversations (D1 `meta.changes` counts cascades). Fixed with `DELETE ... RETURNING id`.
 3. Invisible Unicode separators had been written literally into regex source. Replaced with escapes; added a scan.
+4. (PR review) Reading with a cursor that skipped unread human messages marked them delivered too. Fixed with a lower `seq` bound; regression test added.
+5. (PR review) The `abuse_retention_days` setting was not applied (events always kept 7 days). Retention now deletes by `created_at` against the current setting; regression test added.
 
-## Vitest cases (93)
+## Vitest cases (95; list below predates the two PR-review regression tests)
 
 ### `tests/integration/admin.test.ts` (13)
 

@@ -263,10 +263,11 @@ export async function listMessages(
     writes.push(
       ctx.db
         .prepare(
-          `UPDATE messages SET delivered_at = ?3 WHERE conversation_id = ?1 AND sender != 'agent'
-           AND delivered_at IS NULL AND seq <= ?2`,
+          `UPDATE messages SET delivered_at = ?4 WHERE conversation_id = ?1 AND sender != 'agent'
+           AND delivered_at IS NULL AND seq > ?2 AND seq <= ?3`,
         )
-        .bind(conv.id, lastSeq, now),
+        // Only the page actually returned: a cursor can skip earlier messages.
+        .bind(conv.id, afterSeq, lastSeq, now),
     );
   }
   await ctx.db.batch(writes);

@@ -20,7 +20,7 @@ Owner alert queue. `status`: `pending, sending, sent, failed, dead, suppressed, 
 `admin_subject` (email or `system:retention`), `action`, `target_type`, `target_id`, `metadata_json` (identifiers, field names, enum values only).
 
 ### `abuse_events`
-`event_category`, `request_id`, `correlation_digest` (16 hex chars of a keyed, day-rotated source digest), `expires_at` (default 7 days).
+`event_category`, `request_id`, `correlation_digest` (16 hex chars of a keyed, day-rotated source digest), `expires_at` (default-7-day hint). The retention job deletes by `created_at` against the current `abuse_retention_days` setting.
 
 ### `rate_limit_counters`
 `bucket_key` (`<scope>:<digest or id>:<window start ms>`), `count`, `expires_at`. Updated with a single atomic upsert.
