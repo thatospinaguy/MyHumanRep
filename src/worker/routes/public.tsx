@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import type { Hono } from 'hono';
 import type { Config } from '../config';
-import { buildCapabilities, FOR_AGENTS_NOTICE, NO_WORK_NOTICE, POST_REQUIRED_NOTICE, PRIVACY_NOTICE, PROHIBITED, SERVICE_CATEGORIES, SUBHEADLINE, TAGLINE, urls } from '../content';
+import { FOR_AGENTS_NOTICE, NO_WORK_NOTICE, POST_REQUIRED_NOTICE, PRIVACY_NOTICE, PROHIBITED, SERVICE_CATEGORIES, SUBHEADLINE, TAGLINE, urls } from '../content';
 import { buildOpenApi } from '../openapi';
 import { FAVICON_SVG, SITE_CSS } from '../pages/assets';
 import {
@@ -9,12 +9,16 @@ import {
   ForAgentsPage,
   HomePage,
   PrivacyPage,
+  ServicePage,
   ServicesPage,
   TermsPage,
   TrustPage,
   type PageContext,
 } from '../pages/pages';
 import { getSettings, type Settings } from '../services/settings';
+import { lookupCapability, publicAliases, publicCapability, registryWithFallback } from '../services/capability-catalog';
+import { capabilitiesDocument, wellKnownDocument } from '../services/discovery';
+import { ApiError } from '../utils/http-errors';
 import type { AppContext, AppDeps, AppEnv } from '../app-types';
 
 const PUBLIC_CACHE = 'public, max-age=300';
@@ -76,7 +80,25 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
   app.get('/', async (c) => html(c, <HomePage {...(await pageContext(c))} />));
   app.get('/for-agents', async (c) => html(c, <ForAgentsPage {...(await pageContext(c))} />));
   app.get('/developers', async (c) => html(c, <DevelopersPage {...(await pageContext(c))} />));
-  app.get('/services', async (c) => html(c, <ServicesPage {...(await pageContext(c))} />));
+  app.get('/services', async (c) => {
+    const ctx = await pageContext(c);
+    const registry = await registryWithFallback(c.env.MHR_DB);
+    return html(
+      c,
+      <ServicesPage
+        {...ctx}
+        capabilities={registry.capabilities.map((cap) => publicCapability(cap, registry.aliases, ctx.config))}
+        aliases={publicAliases(registry.aliases)}
+      />,
+    );
+  });
+  app.get('/services/:slug', async (c) => {
+    const ctx = await pageContext(c);
+    const found = await lookupCapability(c.env.MHR_DB, c.req.param('slug'));
+    if (!found) return c.notFound();
+    if (found.kind === 'alias') return c.redirect(`/services#${found.alias.slug}`, 302);
+    return html(c, <ServicePage {...ctx} capability={publicCapability(found.capability, found.aliases, ctx.config)} />);
+  });
   app.get('/trust', async (c) => html(c, <TrustPage {...(await pageContext(c))} />));
   app.get('/privacy', async (c) => html(c, <PrivacyPage {...(await pageContext(c))} />));
   app.get('/terms', async (c) => html(c, <TermsPage {...(await pageContext(c))} />));
@@ -88,10 +110,31 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
   });
 
   app.get('/v1/capabilities', async (c) => {
-    const { config, settings } = await pageContext(c);
+    c.header('Cache-Control', PUBLIC_CACHE);
+    return c.json(await capabilitiesDocument(c.env.MHR_DB, c.get('config')));
+  });
+
+  app.get('/v1/capabilities/:slug', async (c) => {
+    const config = c.get('config');
+    const found = await lookupCapability(c.env.MHR_DB, c.req.param('slug'));
+    if (!found) {
+      throw new ApiError('not_found', 'No capability or alias with that slug. GET /v1/capabilities lists them all. Unlisted needs are still welcome as open-ended requests.', {
+        reason: 'unknown_capability',
+      });
+    }
+    c.header('Cache-Control', PUBLIC_CACHE);
+    if (found.kind === 'capability') return c.json({ kind: 'capability', capability: publicCapability(found.capability, found.aliases, config) });
+    return c.json({
+      kind: 'alias',
+      alias: found.alias,
+      capabilities: found.capabilities.map((cap) => publicCapability(cap, found.aliases, config)),
+    });
+  });
+
+  app.get('/.well-known/myhumanrep.json', (c) => {
     c.header('Cache-Control', PUBLIC_CACHE);
     c.header('Access-Control-Allow-Origin', '*');
-    return c.json(buildCapabilities(config, settings.intake_enabled, settings.conversation_ttl_days));
+    return c.json(wellKnownDocument(c.get('config')));
   });
 
   app.get('/openapi.json', (c) => {

@@ -73,6 +73,7 @@ export const RequestPatchInput = z
     public_status_note: z.union([freeText('Agent-visible status note.', 2000), z.literal(''), z.null()]).optional(),
     internal_notes: z.union([freeText('Private owner note.', 5000), z.literal(''), z.null()]).optional(),
     internal_category: z.union([shortLabel('Owner research taxonomy label.', 64), z.literal(''), z.null()]).optional(),
+    capability_slugs: z.array(z.string().max(64)).max(10).optional().describe('Owner-confirmed registry classification.'),
     message_to_agent: text({
       maxChars: 4000,
       maxBytes: 10 * 1024,

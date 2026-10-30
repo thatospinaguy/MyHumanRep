@@ -3,8 +3,9 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { buildServiceContext, type AppContext, type AppDeps, type AppEnv } from '../app-types';
-import { buildCapabilities, FOR_AGENTS_NOTICE, NO_WORK_NOTICE, PRIVACY_NOTICE } from '../content';
-import { AddMessageInput, capabilityRequestShape, CreateConversationInput, refineBudget } from '../schemas/api';
+import { FOR_AGENTS_NOTICE, NO_WORK_NOTICE, PRIVACY_NOTICE } from '../content';
+import { capabilitiesDocument } from '../services/discovery';
+import { AddMessageInput, capabilityRequestShape, CreateConversationInput, refineCapabilityRequest } from '../schemas/api';
 import { enforceEdgeLimit, enforceQuota } from '../services/abuse';
 import { createCapabilityRequest, listCapabilityRequests } from '../services/capability-requests';
 import type { ServiceContext } from '../services/context';
@@ -15,7 +16,6 @@ import {
   createConversation,
   listMessages,
 } from '../services/conversations';
-import { getSettings } from '../services/settings';
 import { ApiError, errorBody } from '../utils/http-errors';
 import { MINUTE } from '../utils/time';
 
@@ -83,8 +83,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     },
     () =>
       run(ctx, async () => {
-        const settings = await getSettings(ctx.db, ctx.config);
-        return buildCapabilities(ctx.config, settings.intake_enabled, settings.conversation_ttl_days);
+        return capabilitiesDocument(ctx.db, ctx.config);
       }),
   );
 
@@ -152,7 +151,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
       inputSchema: z
         .object({ ...authShape, ...capabilityRequestShape })
         .strict()
-        .superRefine(refineBudget),
+        .superRefine(refineCapabilityRequest),
       annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
     },
     (args) =>
@@ -194,6 +193,105 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
         return closeConversation(ctx, conv);
       }),
   );
+
+  // ---------- Master spec 12.2 base tool names (same services; V1 names above stay for existing clients) ----------
+
+  server.registerTool(
+    'discover_human_capabilities',
+    {
+      title: 'Discover human capabilities',
+      description:
+        'Lists all human capabilities you can inquire about (20 canonical services plus aliases), with truthful readiness: inquiry_available vs fulfillment_available. No credentials needed. Unlisted needs are welcome too.',
+      inputSchema: z.object({}).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    () => run(ctx, () => capabilitiesDocument(ctx.db, ctx.config)),
+  );
+
+  server.registerTool(
+    'read_messages',
+    {
+      title: 'Read messages',
+      description: 'Same as read_conversation: messages and status for your own conversation, with cursor pagination.',
+      inputSchema: z
+        .object({
+          ...authShape,
+          after: z.string().max(64).optional().describe('next_cursor from a previous read.'),
+          limit: z.number().int().min(1).max(100).optional().describe('Page size, default 50.'),
+        })
+        .strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return listMessages(ctx, conv, {
+          ...(rest.after !== undefined ? { after: rest.after } : {}),
+          ...(rest.limit !== undefined ? { limit: rest.limit } : {}),
+        });
+      }),
+  );
+
+  server.registerTool(
+    'describe_human_need',
+    {
+      title: 'Describe a human need',
+      description:
+        'Describe anything you need a human for, in your own words (objective or problem_statement). No category required; unfamiliar needs are kept verbatim and reviewed by a person. Nothing is booked or paid.',
+      inputSchema: z.object({ ...authShape, ...capabilityRequestShape }).strict().superRefine(refineCapabilityRequest),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return (await createCapabilityRequest(ctx, conv, rest)).body;
+      }),
+  );
+
+  server.registerTool(
+    'get_capability_request_status',
+    {
+      title: 'Get capability request status',
+      description: "Review status, classification and owner notes for your conversation's requests. Never includes internal notes.",
+      inputSchema: z.object(authShape).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token } = split(args);
+        const conv = await authenticateAgent(ctx, id, token);
+        return listCapabilityRequests(ctx, conv);
+      }),
+  );
+
+  // Service-specific inquiry helpers (spec 12.3). Each is a plain capability request with a preset hint.
+  const { category_hint: _omitHint, ...shapeWithoutHint } = capabilityRequestShape;
+  void _omitHint;
+  const presets: Array<[string, string, string, string]> = [
+    ['request_human_observation', 'human-world-oracle', 'Request a human observation', 'Ask a person to observe real-world conditions somewhere (Human World Oracle).'],
+    ['request_independent_witness', 'human-witness', 'Request an independent witness', 'Ask for an independent human witness of a permitted event (Human Witness).'],
+    ['request_sensory_report', 'human-senses', 'Request a sensory report', 'Ask willing people to describe texture, taste, smell, sound or atmosphere (Human Senses).'],
+    ['request_experiment_feasibility', 'human-laboratory', 'Request experiment feasibility review', 'Ask whether a nonhazardous physical test or prototype is feasible (Human Laboratory). Feasibility review only.'],
+  ];
+  for (const [name, hint, title, description] of presets) {
+    server.registerTool(
+      name,
+      {
+        title,
+        description: `${description} Inquiry only: a human reviews it; nothing is scheduled, dispatched or charged.`,
+        inputSchema: z.object({ ...authShape, ...shapeWithoutHint }).strict().superRefine(refineCapabilityRequest),
+        annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      (args) =>
+        run(ctx, async () => {
+          const { id, token, rest } = split(args);
+          const conv = await authenticateAgent(ctx, id, token);
+          return (await createCapabilityRequest(ctx, conv, { ...rest, category_hint: hint })).body;
+        }),
+    );
+  }
 
   return server;
 }

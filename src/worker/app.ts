@@ -19,7 +19,7 @@ function redactPath(path: string): string {
   return path.replace(/\/(conv|cap|msg)_[A-Za-z0-9_-]+/g, '/$1_{id}').slice(0, 200);
 }
 
-const CORS_PATHS = /^\/(v1\/|openapi\.json$|health$|llms\.txt$)/;
+const CORS_PATHS = /^\/(v1\/|openapi\.json$|health$|llms\.txt$|\.well-known\/myhumanrep\.json$)/;
 
 export function createApp(deps: AppDeps = {}): Hono<AppEnv> {
   const app = new Hono<AppEnv>();

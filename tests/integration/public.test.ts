@@ -77,7 +77,7 @@ describe('public discovery', () => {
       rest_base_url: 'https://staging.myhumanrep.test/v1',
       openapi_url: 'https://staging.myhumanrep.test/openapi.json',
       mcp_url: 'https://staging.myhumanrep.test/mcp',
-      supported_interactions: ['inquiry', 'conversation', 'open_ended_capability_request'],
+      supported_interactions: ['inquiry', 'conversation', 'open_ended_capability_request', 'human_embassy', 'original_persona'],
       example_capabilities: ['human_eyes', 'human_hands', 'human_presence', 'human_mind', 'human_create', 'human_assist'],
       custom_requests_accepted: true,
       anonymous_initial_inquiries: true,
@@ -114,7 +114,9 @@ describe('public discovery', () => {
     const create = doc.components.schemas.CreateConversationInput;
     expect(create.required).toEqual(['message']);
     expect(create.additionalProperties).toBe(false);
-    expect(doc.components.schemas.CapabilityRequestInput.required.sort()).toEqual(['client_request_id', 'objective']);
+    // Option B: objective OR problem_statement (enforced at runtime), so only the idempotency key is schema-required.
+    expect(doc.components.schemas.CapabilityRequestInput.required).toEqual(['client_request_id']);
+    expect(doc.components.schemas.CapabilityRequestInput.properties).toHaveProperty('problem_statement');
     // Every $ref resolves.
     const refs = JSON.stringify(doc).match(/#\/components\/schemas\/\w+/g) ?? [];
     for (const r of refs) expect(doc.components.schemas).toHaveProperty(r.split('/').pop()!);

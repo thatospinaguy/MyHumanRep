@@ -12,6 +12,7 @@ import {
   TAGLINE,
   urls,
 } from '../content';
+import type { publicAliases, publicCapability } from '../services/capability-catalog';
 import type { Settings } from '../services/settings';
 import { Code, Layout } from './layout';
 
@@ -388,40 +389,137 @@ export function DevelopersPage({ config }: PageContext) {
   );
 }
 
-export function ServicesPage({ config }: PageContext) {
+type PublicCapabilityView = ReturnType<typeof publicCapability>;
+
+const READINESS_LABEL: Record<string, string> = {
+  inquiry_only: 'Inquiry only',
+  human_reviewed_inquiry: 'Human-reviewed inquiry',
+  pilot: 'Pilot',
+  live: 'Live',
+  future: 'Future',
+};
+
+export function ServicesPage({
+  config,
+  capabilities,
+  aliases,
+}: PageContext & { capabilities: PublicCapabilityView[]; aliases: ReturnType<typeof publicAliases> }) {
   return (
     <Layout
       config={config}
       path="/services"
       title="Human capabilities for AI agents | MyHumanRep"
-      description="Illustrative human capabilities an AI agent can ask about: observation, physical help, presence, judgment, original content and accountable assistance. Novel requests welcome."
+      description="The full registry of human capabilities an AI agent can inquire about: observation, witnessing, embassy dialogue, senses, laboratory work, representation, original media and more. Novel requests welcome."
     >
       <h1>Human capabilities</h1>
       <p class="lead">
-        Illustrative categories. They are optional hints, not a required selection. Describe what you need in ordinary
-        language, including things not listed here.
+        Every capability below accepts inquiries now. None is a required selection: describe what you need in ordinary
+        language, including things not listed. Availability is shown truthfully; inquiry is not fulfillment.
       </p>
-      <ul class="cards">
-        {SERVICE_CATEGORIES.map((c) => (
-          <li>
-            <strong>{c.name}</strong> <code>{c.id}</code>
-            <span>{c.description}</span>
+      <p>
+        Machine-readable: <a href="/v1/capabilities">/v1/capabilities</a> (each entry also at{' '}
+        <code>/v1/capabilities/&#123;slug&#125;</code>).
+      </p>
+      <ol class="cards">
+        {capabilities.map((c) => (
+          <li id={c.slug}>
+            <strong>
+              <a href={`/services/${c.slug}`}>{c.name}</a>
+            </strong>{' '}
+            <code>{c.slug}</code>
+            <span>{c.summary}</span>
+            <span class="muted">
+              {READINESS_LABEL[c.readiness] ?? c.readiness}. Fulfillment {c.fulfillment_available ? 'available' : 'not yet available'}.
+            </span>
           </li>
         ))}
-        <li>
-          <strong>Other / Unclassified</strong> <code>other</code>
-          <span>Anything else a person could contribute. No category is required at all.</span>
+        <li id="unclassified">
+          <strong>Something else (unclassified)</strong> <code>no category needed</code>
+          <span>Any other lawful thing a person could help with. It is kept word for word and reviewed by a human.</span>
         </li>
-      </ul>
+      </ol>
+      <h2>Shorthand families</h2>
+      <p>These names are views over the capabilities above. Use them as hints if they fit.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Family</th>
+            <th>Covers</th>
+            <th>Examples</th>
+          </tr>
+        </thead>
+        <tbody>
+          {aliases.map((a) => (
+            <tr id={a.slug}>
+              <td>
+                {a.name} <code>{a.slug}</code>
+              </td>
+              <td>{a.maps_to.join(', ')}</td>
+              <td>{a.examples.join('; ')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <h2>What happens to a request</h2>
       <p>{NO_WORK_NOTICE}</p>
       <p>
-        A human reviews lawful scope, authorization and qualifications. Possible outcomes in this release:
-        clarification requested, needs authorization, eligible for future scoping, or declined. None of these accepts,
-        schedules or prices work.
+        A human reviews lawful scope, authorization and qualifications. None of the review outcomes accepts, schedules
+        or prices work.
       </p>
-      <h2>Not offered</h2>
+      <h2>Boundaries</h2>
       <p>{PROHIBITED}</p>
+    </Layout>
+  );
+}
+
+export function ServicePage({ config, capability: c }: PageContext & { capability: PublicCapabilityView }) {
+  return (
+    <Layout config={config} path={`/services/${c.slug}`} title={`${c.name} | MyHumanRep`} description={c.summary}>
+      <p>
+        <a href="/services">All capabilities</a>
+      </p>
+      <h1>{c.name}</h1>
+      <p class="lead">{c.summary}</p>
+      <dl class="facts">
+        <dt>Availability</dt>
+        <dd>
+          {READINESS_LABEL[c.readiness] ?? c.readiness}. Inquiry {c.inquiry_available ? 'open' : 'closed'}; fulfillment{' '}
+          {c.fulfillment_available ? 'available' : 'not yet available'}; no quotes yet.
+        </dd>
+        <dt>Where</dt>
+        <dd>{c.location_type.replace(/_/g, ' ')}</dd>
+        <dt>Risk tier</dt>
+        <dd>{c.risk_tier}</dd>
+      </dl>
+      <h2>Example requests</h2>
+      <ul>
+        {c.example_intents.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>Typical deliverables</h2>
+      <ul>
+        {c.deliverables.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>Skills involved</h2>
+      <ul>
+        {c.required_skills.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>Before any real work</h2>
+      <ul>
+        {c.authorization_requirements.map((e) => (
+          <li>{e}</li>
+        ))}
+      </ul>
+      <h2>How to inquire</h2>
+      <p>{c.how_to_inquire}</p>
+      <p>
+        Start a conversation first if you have none: see <a href="/for-agents">/for-agents</a>. {NO_WORK_NOTICE}
+      </p>
     </Layout>
   );
 }

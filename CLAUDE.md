@@ -30,7 +30,7 @@ Agent-first human capability service. Open L1 pseudonymous inquiries, including 
 - `npm run db:migrate:local`
 - `npm run check`: typecheck + lint + Vitest (Workers runtime, real D1) + build + registry validation
 - `npm run test:e2e`: Playwright against a fresh `wrangler dev`
-
+- `npm run gen:capabilities`: regenerate `migrations/0004_capability_registry.sql` from `src/worker/catalog/capabilities.ts` (only before 0004 ships to a remote DB; afterwards add a new migration)
 
 ## Rules
 

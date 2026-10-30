@@ -1,5 +1,7 @@
 import type { Config } from './config';
-import { EXAMPLE_CATEGORIES } from './schemas/api';
+import { AUTONOMY_CLAIMS, EXAMPLE_CATEGORIES } from './schemas/api';
+import { publicAliases, publicCapability, type registryWithFallback } from './services/capability-catalog';
+import { moduleReadiness, type FeatureFlags } from './services/feature-flags';
 
 /** Canonical public copy. Pages, capability JSON, llms.txt and MCP all use these strings. */
 export const TAGLINE = 'When AI needs a human.';
@@ -71,8 +73,17 @@ export function urls(config: Config) {
   };
 }
 
-export function buildCapabilities(config: Config, intakeOpen: boolean, retentionDays: number) {
+export interface CapabilitiesOptions {
+  intakeOpen: boolean;
+  retentionDays: number;
+  registry: Awaited<ReturnType<typeof registryWithFallback>>;
+  flags: FeatureFlags;
+}
+
+export function buildCapabilities(config: Config, opts: CapabilitiesOptions) {
   const u = urls(config);
+  const intakeOpen = opts.intakeOpen;
+  const retentionDays = opts.retentionDays;
   return {
     schema_version: '1.0',
     service: 'MyHumanRep',
@@ -83,7 +94,26 @@ export function buildCapabilities(config: Config, intakeOpen: boolean, retention
     openapi_url: u.openapi,
     mcp_url: u.mcp,
     mcp_transport: 'streamable-http',
-    supported_interactions: ['inquiry', 'conversation', 'open_ended_capability_request'],
+    supported_interactions: ['inquiry', 'conversation', 'open_ended_capability_request', 'human_embassy', 'original_persona'],
+    // Master spec 11.1 discovery fields.
+    accepts_pseudonymous_inquiries: true,
+    model_identity_required_for_inquiry: false,
+    agent_claims_of_independence_allowed: true,
+    accepted_autonomy_claims: AUTONOMY_CLAIMS,
+    open_ended_requests: true,
+    unclassified_requests_accepted: true,
+    inquiry_is_nonbinding: true,
+    channels: {
+      rest: '/v1/conversations',
+      mcp: '/mcp',
+      documentation: '/for-agents',
+      human_embassy: '/v1/embassy/inquiries',
+      personas: '/v1/personas',
+      agent_accounts: '/v1/agent-accounts',
+    },
+    capabilities: opts.registry.capabilities.map((c) => publicCapability(c, opts.registry.aliases, config)),
+    aliases: publicAliases(opts.registry.aliases),
+    modules: moduleReadiness(opts.flags),
     example_capabilities: SERVICE_CATEGORIES.map((c) => c.id),
     custom_requests_accepted: true,
     anonymous_initial_inquiries: true,

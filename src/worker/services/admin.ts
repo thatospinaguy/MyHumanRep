@@ -19,6 +19,7 @@ import { fromMinorUnits } from '../utils/money';
 import { DAY, iso } from '../utils/time';
 import { auditStatement } from './audit';
 import { parseInput } from './context';
+import { setRequestCapabilities } from './admin-registry';
 import { normalizeAutonomy, normalizeIntent } from './self-reports';
 import { allowedRequestTransitions, canTransitionRequest, nextConversationStatus } from './state';
 
@@ -526,8 +527,14 @@ export async function listRequests(ctx: AdminContext, raw: unknown) {
   } else if (query.status) {
     where.add('r.status = ?', query.status);
   }
-  if (query.category === 'unclassified') where.add('(r.category_hint IS NULL OR r.category_hint = \'\')');
-  else if (query.category) where.add('r.category_hint = ?', query.category);
+  if (query.category === 'unclassified') where.add("r.classification_state = 'unclassified'");
+  else if (query.category) {
+    where.add(
+      '(r.category_hint = ? OR EXISTS (SELECT 1 FROM json_each(r.classified_capabilities_json) j WHERE j.value = ?))',
+      query.category,
+      query.category,
+    );
+  }
   if (query.via) where.add('r.created_via = ?', query.via);
   const from = dateBound(query.from, false);
   const to = dateBound(query.to, true);
@@ -632,6 +639,8 @@ export async function patchRequest(ctx: AdminContext, id: string, raw: unknown) 
     set('internal_category', input.internal_category === '' ? null : input.internal_category);
     changed.push('internal_category');
   }
+  const classification = input.capability_slugs !== undefined ? await setRequestCapabilities(ctx, id, input.capability_slugs) : null;
+  if (classification) changed.push('capability_slugs');
 
   const statements: D1PreparedStatement[] = [];
   let messageId: string | null = null;
@@ -662,6 +671,7 @@ export async function patchRequest(ctx: AdminContext, id: string, raw: unknown) 
       messageId ?? undefined,
     ),
   );
+  if (classification) statements.push(classification);
   const results = await ctx.db.batch(statements);
   if (messageId) await assertMessageInserted(ctx, results[0], conv.id);
   return { request: adminRequest(await loadRequest(ctx, id)), message_id: messageId };
