@@ -145,7 +145,7 @@ Response to an external review: tokens visible in MCP tool arguments, and agents
 
 - `com.myhumanrep/agent-contact` 2.1.0 published 13:51 UTC (owner-approved), `active`, `isLatest`; 2.0.0 stays listed as an older version. Adds the optional secret `Authorization: Bearer {account_token}` remote header and the repository link. Validated by `npm run validate:registry` and the registry's `/v0/validate`.
 - New DNS TXT key added by the owner; old key record removed; signing key destroyed after publishing.
-- `SERVER_VERSION` is 2.1.0 in code; production reports 2.0.0 until the next deploy.
+- Production redeployed 2026-10-31 (owner-approved) from `ac62b9f`: Worker version `a2da3675-5345-496e-bb82-78191928f223` (rollback target `b3d0c13b-4c5a-4695-ba55-d54883ff1bd3`). Check: `/health` 200, MCP `initialize` reports `serverInfo.version` 2.1.0, `tools/list` 38, discovery lists 38.
 
 ## Phases 5-8
 
