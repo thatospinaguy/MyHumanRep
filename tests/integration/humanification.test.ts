@@ -348,3 +348,33 @@ describe('Humanification over MCP', () => {
     await client.close();
   });
 });
+
+describe('consent templates and disclosure', () => {
+  it('serves draft consent templates publicly, clearly marked as needing legal review', async () => {
+    const h = await makeHarness();
+    const list = await json(await h.fetch('/v1/consent-templates'));
+    expect(list.status).toBe('draft_requires_legal_review');
+    expect(list.notice).toContain('Not legal advice');
+    expect(list.templates.map((t: { slug: string }) => t.slug)).toEqual(['fictional-performance', 'event-presence', 'representation']);
+    expect(list.never_authorized).toEqual(expect.arrayContaining(['banking, payments or financial instructions']));
+    const one = await json(await h.fetch('/v1/consent-templates/representation'));
+    expect(one.sections.map((s: { key: string }) => s.key)).toEqual(expect.arrayContaining(['consent_revocation', 'stop_escalation', 'mandate', 'disclosure']));
+    expect((await h.fetch('/v1/consent-templates/nope')).status).toBe(404);
+  });
+
+  it('T-058: official contexts always require role disclosure; creative personas stay allowed elsewhere', async () => {
+    const h = await makeHarness();
+    const a = await account(h);
+    const p = await json(await h.fetch('/v1/personas', { method: 'POST', headers: a.auth, json: ADRIAN }));
+    const official = await json(
+      await h.fetch(`/v1/personas/${p.persona_id}/representation-inquiries`, { method: 'POST', headers: a.auth, json: { client_request_id: 'o1', role_type: 'spokesperson', context: 'official' } }),
+    );
+    expect(official.disclosure).toMatchObject({ context: 'official', required: 'always' });
+    expect(official.consent_template).toEqual({ slug: 'representation', version: '0.1-draft', status: 'draft_requires_legal_review' });
+    const creative = await h.fetch(`/v1/personas/${p.persona_id}/embodiment-inquiries`, { method: 'POST', headers: a.auth, json: { client_request_id: 'c1', role_type: 'fictional_performance', context: 'creative' } });
+    expect(creative.status).toBe(201);
+    const body = await json(creative);
+    expect(body.disclosure.required).toBe('context_and_consent');
+    expect(body.consent_template.slug).toBe('fictional-performance');
+  });
+});

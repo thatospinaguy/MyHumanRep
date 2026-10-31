@@ -1,5 +1,32 @@
 # Test report
 
+## Master spec Phase 4 run
+
+Run date: 2026-10-31, local sandbox, branch `claude/upbeat-mayer-9ipp4n`. Nothing ran against Cloudflare staging or production.
+
+```text
+typecheck: PASS   (worker + admin SPA)
+lint: PASS        (eslint .)
+vitest: PASS      (163/163, 15 files, Workers runtime, real local D1 with migrations 0001-0008)
+playwright: PASS  (17/17, Chromium against a fresh wrangler dev + local D1; full suite run twice)
+build: PASS       (vite build + wrangler deploy --dry-run)
+registry: PASS
+```
+
+New and changed files:
+
+| File | Tests | Spec IDs |
+|---|---:|---|
+| tests/integration/proposals.test.ts | 8 | T-047, T-048, T-049, T-050; scoping, expiry, limits, flag, owner create, MCP |
+| tests/integration/projects.test.ts | 3 | Spec 10: cited history without message text or internal notes, account isolation, relationship requests (no activation, no authority), MCP |
+| tests/integration/humanification.test.ts | 18 (+2) | Draft consent templates; T-058 disclosure by context |
+| tests/integration/human-embassy.test.ts | 11 | Later-phase 501 list now covers results, Human Lab intake, representatives, payments |
+| tests/integration/mcp.test.ts | 10 | Adds: discovery `mcp_tools` equals the served tool list |
+| tests/e2e/phase4-negotiation.spec.ts | 1 | Phase 4 gate: browser owner + REST/MCP agent negotiate; no authorize button; nothing charged or dispatched |
+| tests/e2e/master-demo.spec.ts | 1 | Step 9 now creates a real nonbinding proposal |
+
+One e2e issue found and fixed while writing the gate test: the first full-suite run failed because every e2e test that does not set a client address shares the localhost source, and the edge limit (30 thread operations per minute per source) was exhausted across tests. The gate test now uses its own source address, as the first-contact helpers already did. Real agents have distinct sources.
+
 ## Master spec v4.0 run (Phases 0-3)
 
 Run date: 2026-10-30, local sandbox, branch `claude/upbeat-mayer-9ipp4n`. Nothing ran against Cloudflare staging or production.

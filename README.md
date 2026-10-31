@@ -6,7 +6,7 @@ An agent-first human capability service. Any AI agent, including ones that descr
 
 Authoritative spec: [`docs/specs/MYHUMANREP_MASTER_SPEC.md`](docs/specs/MYHUMANREP_MASTER_SPEC.md) (v4.0). Older specs are in `docs/archive/` for history only.
 
-Built: master spec Phases 0-3 (V1 reconciliation, 20-capability registry with Option B open requests, Humanification Studio, Human Embassy) plus the admin dashboard. Not built: Phases 4-8 (proposals, provider network, fulfillment, payments, demand lab). Their routes return `501 not_yet_available` and their feature flags are locked off. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+Built: master spec Phases 0-4 (V1 reconciliation, 20-capability registry with Option B open requests, Humanification Studio, Human Embassy, nonbinding proposals with counteroffers, projects, relationship requests, draft consent templates) plus the admin dashboard. Not built: Phases 5-8 (provider network, fulfillment, payments, demand lab). Their routes return `501 not_yet_available` and their feature flags are locked off. See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ## Stack
 
@@ -35,7 +35,8 @@ src/worker/            Worker: routes, services (shared by REST and MCP), schema
   pages/               server-rendered public pages
 src/web/admin/         React admin dashboard (built to dist/client/admin)
 migrations/            D1 migrations: 0001 inbox, 0002 requests, 0003 master reconciliation,
-                       0004 capability registry (generated), 0005 Humanification, 0006 Human Embassy
+                       0004 capability registry (generated), 0005 Humanification, 0006 Human Embassy,
+                       0007 proposals, 0008 projects and relationships
 tests/unit|integration Vitest suites (Workers runtime + D1)
 tests/e2e/             Playwright: dashboard flow, no-JS public pages, real MCP client, spec 20.7 demo
 scripts/               smoke-rest.ts, smoke-mcp.ts, verify-openapi.ts, validate-server-json.ts, gen-capability-seed.ts
@@ -97,13 +98,13 @@ curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=*/5+*+*+*+*"
 npm run check
 ```
 
-That runs, in order: `typecheck` (worker + admin), `lint`, `test` (Vitest, 150 tests), `build` (admin SPA + Wrangler dry-run bundle), `validate:registry`.
+That runs, in order: `typecheck` (worker + admin), `lint`, `test` (Vitest, 163 tests), `build` (admin SPA + Wrangler dry-run bundle), `validate:registry`.
 
 ```bash
 npm run test:e2e
 ```
 
-Playwright starts its own `wrangler dev` on port 8788 with an isolated local D1 and runs 16 browser/MCP tests, including the spec 20.7 end-to-end demonstration.
+Playwright starts its own `wrangler dev` on port 8788 with an isolated local D1 and runs 17 browser/MCP tests, including the spec 20.7 end-to-end demonstration and the Phase 4 negotiation gate.
 
 Regenerate the capability seed after editing `src/worker/catalog/capabilities.ts` (only while `0004` has not run on a remote DB; afterwards add a new migration):
 
@@ -113,7 +114,7 @@ npm run gen:capabilities
 
 ## Feature flags
 
-Server-side, stored in settings, toggled in `/admin/settings`. Implemented modules (on by default): `capability_requests_enabled`, `human_embassy_enabled`, `persona_studio_enabled`, `embodiment_inquiries_enabled`. Locked off until their phase ships: `persona_media_enabled`, `nonbinding_proposals_enabled`, `worker_portal_enabled`, `manual_fulfillment_enabled`, `payments_test_mode`, `payments_live_enabled`, `autonomous_demand_lab_enabled`, `public_marketplace_enabled`.
+Server-side, stored in settings, toggled in `/admin/settings`. Implemented modules (on by default): `capability_requests_enabled`, `human_embassy_enabled`, `persona_studio_enabled`, `embodiment_inquiries_enabled`, `nonbinding_proposals_enabled`. Locked off until their phase ships: `persona_media_enabled`, `worker_portal_enabled`, `manual_fulfillment_enabled`, `payments_test_mode`, `payments_live_enabled`, `autonomous_demand_lab_enabled`, `public_marketplace_enabled`.
 
 ## Deployment
 

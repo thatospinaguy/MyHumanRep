@@ -54,6 +54,12 @@ Original personas only (`origin` CHECK). `visibility` `private|shared|public` wi
 ### `embassy_inquiries`
 Human Embassy dialogue. `message_id` points at the agent message that carries the text (`SET NULL`). Optional unverified fields (`autonomy_claim`, `claimed_origin`, `contact_reason`, confidentiality, constraints). `status` `submitted|awaiting_human|human_replied|clarification_needed|referral_consideration|needs_specialist_review|closed|declined|blocked`. `public_status_note` is agent-visible; `internal_notes` is owner-only. Unique per `(conversation_id, client_request_id)`.
 
+### `proposals`, `proposal_revisions`, `proposal_events` (0007)
+`proposals` holds one negotiation per row: `capability_request_id` and `conversation_id` (both cascade), `status` (`draft|proposed|countered|terms_agreed_nonbinding|awaiting_authorization|authorized|cancelled|expired`; nothing sets `authorized` in this release), `current_revision`, `agreed_revision` (cleared by any counter), `initiated_by` (`agent|admin`), `expires_at`, owner-only `internal_notes`, agent idempotency key unique per request. `proposal_revisions` are immutable terms keyed `(proposal_id, revision)`: scope, deliverables, timing, location, skills, evidence, cancellation, confidentiality, `price_minor` + `currency`, `valid_until`, `changed_fields_json`, `material_change`. `proposal_events` log every transition with actor (`agent|admin|system`).
+
+### `projects`, `project_conversations`, `agent_human_relationships` (0008)
+Projects belong to an agent account (cascade) with an optional owned persona (`SET NULL`). `project_conversations` may only reference conversations the owner claimed. Relationship requests: `role_type`, `purpose_text`, unverified `preferred_rep_ref`, scope/exclusions/term text, `status` (`requested|under_review|clarification_needed|declined|withdrawn|active|ended`; `active` unreachable until Phase 5), `representative_id` always NULL for now, agent-visible `public_status_note`, owner-only `internal_notes`, idempotency key unique per account.
+
 ## Invariants
 
 - Plaintext tokens are never stored; secrets never live in D1.
@@ -63,4 +69,4 @@ Human Embassy dialogue. `message_id` points at the agent message that carries th
 
 ## Future versions
 
-Phases 4-7 add tables (proposals, representatives, assignments, evidence, payments) referencing `capability_requests.id` without changing existing columns. Master request statuses will arrive as a new column rather than a widened `CHECK`, because rebuilding `capability_requests` would null out message links (ADR D42).
+Phases 5-7 add tables (representatives, agreements, assignments, evidence, payments) referencing `capability_requests.id` without changing existing columns. Master request statuses will arrive as a new column rather than a widened `CHECK`, because rebuilding `capability_requests` would null out message links (ADR D42).

@@ -416,6 +416,13 @@ export function buildOpenApi(config: Config) {
           responses: { '200': { description: 'Cancelled.', content: json('JsonObject') }, ...errorResponses(400, 401, 409, 501) },
         },
       },
+      '/v1/consent-templates': {
+        get: { operationId: 'listConsentTemplates', summary: 'Draft embodiment and representation consent templates (under legal review; nothing is signed via the API)', responses: { '200': { description: 'Templates, disclosure rules and never-authorized actions.', content: json('JsonObject') } } },
+      },
+      '/v1/consent-templates/{slug}': {
+        parameters: [{ name: 'slug', in: 'path', required: true, schema: { type: 'string' } }],
+        get: { operationId: 'getConsentTemplate', summary: 'One draft consent template', responses: { '200': { description: 'Template.', content: json('JsonObject') }, ...errorResponses(404) } },
+      },
       '/v1/projects': {
         post: {
           operationId: 'createProject',

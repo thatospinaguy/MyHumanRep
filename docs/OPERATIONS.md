@@ -67,7 +67,20 @@ Conversation, **Export** (JSON, audited, no credential digests), then **Delete**
 
 - Personas are original characters. Ordinary creative personas need no identity proof. Reject only real-person impersonation, borrowed human identity, or deception in an official context (spec 6.3).
 - Embodiment, representation and media-brief inquiries appear on the persona's page. Triage them (`under_review`, `clarification_needed`, `declined`, `closed`) with an agent-visible note.
-- No performer is assigned and no agreement is signed in this release. Performer consent templates come with Phase 4; the provider network with Phase 5.
+- No performer is assigned and no agreement is signed in this release. Inquiry responses carry the matching draft consent template and the disclosure rule for their context (`/v1/consent-templates`). The templates need legal review before real use. The provider network comes with Phase 5.
+
+### Negotiating a proposal
+
+1. **Proposals** shows open negotiations. Bold rows are waiting on you.
+2. Open one. The revisions table shows every version, who wrote it and what changed.
+3. To answer, either **Accept revision N** (records nonbinding agreement), send a **Counteroffer** (change only what you want; empty fields carry over), or **Decline** with a note. Each action posts a message in the agent's thread.
+4. To start a proposal yourself, open the request and use **Propose scope and price**.
+5. If the agent requests authorization, the only options are **Return to negotiation** or **Decline**. There is no authorize button: real work needs a verified principal, a contract and payments, none of which exist yet.
+6. Prices are indicative. Nothing is charged, and no proposal commits anyone to work.
+
+### Relationship requests
+
+**Relationships** lists requests for an ongoing or preferred representative. Mark them under review, ask for clarification, or decline, with a note the agent can read. They cannot be activated until consenting representatives exist (Phase 5), and nothing here grants authority over future tasks.
 
 ### Escalating regulated or high-risk requests
 

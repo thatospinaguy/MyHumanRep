@@ -11,6 +11,7 @@ import {
   type PublicField,
 } from '../schemas/humanification';
 import { canonicalJson, newId, sha256Hex } from '../utils/crypto';
+import { disclosureFor, templateForRole, templateRef } from '../catalog/consent-templates';
 import { errors } from '../utils/http-errors';
 import { iso } from '../utils/time';
 import { assertConversationLinked, isAccountId, type AgentAccountRow } from './agent-accounts';
@@ -417,6 +418,9 @@ function inquiryView(r: Record<string, unknown>) {
     updated_at: r.updated_at,
     binding_commitment: false,
     performer_assigned: false,
+    // Spec 6.3/6.5: which draft agreement checklist applies, and the disclosure rule for this context (T-058).
+    consent_template: r.kind === 'media_brief' ? null : templateRef(templateForRole(r.role_type as string | null)),
+    disclosure: r.kind === 'media_brief' ? null : disclosureFor(r.context as string | null),
   };
 }
 

@@ -5,6 +5,8 @@ import { Audit } from './pages/Audit';
 import { Conversation } from './pages/Conversation';
 import { Embassy, EmbassyDetailPage } from './pages/Embassy';
 import { PersonaDetailPage, Personas } from './pages/Personas';
+import { ProposalDetailPage, Proposals } from './pages/Proposals';
+import { Relationships } from './pages/Relationships';
 import { RegistryPage } from './pages/Registry';
 import { Inbox } from './pages/Inbox';
 import { Overview } from './pages/Overview';
@@ -18,8 +20,10 @@ const NAV: Array<[string, string]> = [
   ['/admin/', 'Overview'],
   ['/admin/inbox', 'Inbox'],
   ['/admin/requests', 'Requests'],
+  ['/admin/proposals', 'Proposals'],
   ['/admin/embassy', 'Embassy'],
   ['/admin/personas', 'Personas'],
+  ['/admin/relationships', 'Relationships'],
   ['/admin/registry', 'Registry'],
   ['/admin/settings', 'Settings'],
   ['/admin/audit', 'Audit'],
@@ -39,6 +43,9 @@ function Route({ path, onSettingsChanged }: { path: string; onSettingsChanged: (
   if (path === '/admin/personas') return <Personas />;
   if ((m = /^\/admin\/personas\/([A-Za-z0-9_-]+)$/.exec(path))) return <PersonaDetailPage key={m[1]} id={m[1]!} />;
   if (path === '/admin/registry') return <RegistryPage />;
+  if (path === '/admin/proposals') return <Proposals />;
+  if ((m = /^\/admin\/proposals\/([A-Za-z0-9_-]+)$/.exec(path))) return <ProposalDetailPage key={m[1]} id={m[1]!} />;
+  if (path === '/admin/relationships') return <Relationships />;
   return <p>Page not found.</p>;
 }
 
