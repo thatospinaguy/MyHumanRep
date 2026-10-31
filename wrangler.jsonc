@@ -59,7 +59,7 @@
         {
           "binding": "MHR_DB",
           "database_name": "myhumanrep-agent-contact-staging",
-          "database_id": "REPLACE_WITH_STAGING_D1_DATABASE_ID",
+          "database_id": "43ceddb2-fa85-4a2b-a197-598401d5f0a7",
           "migrations_dir": "migrations"
         }
       ],
