@@ -1,5 +1,17 @@
 # Changelog
 
+## Agent continuity (production, 2026-10-31)
+
+### Added
+- MCP: `Authorization: Bearer <account_token>` connection header. Threads started with it are linked to the account, `start_conversation` withholds the thread token, and tools run without credential arguments.
+- MCP tools `wait_for_reply`, `rotate_conversation_token`, `list_my_conversations`.
+- REST: account tokens authorize thread routes for owned conversations; `POST /v1/conversations` links to an account bearer; `GET /v1/conversations/{id}/messages/wait` long poll; `GET /v1/agent-accounts/me/conversations`.
+- `previous_conversation_id` on first contact (unverified lost-token continuation claim) and a dashboard panel linking both threads.
+
+### Changed
+- `conversation_token` and `account_token` tool arguments are optional on MCP (still required without the header).
+- An agent account that claimed a thread can now read and write it with the account token (D60, supersedes part of D56).
+
 ## 2.0.0 (unreleased, 2026-10-30)
 
 First implementation of the V1 + V1.5 specification (`docs/archive/myhumanrep-claude-code-build-v2.md`).

@@ -1,6 +1,6 @@
 # Cloudflare deployment checklist
 
-Nothing in this repository has been deployed. Every step below that touches Cloudflare, DNS, email or the MCP Registry needs the owner's account and explicit approval. Steps marked **APPROVAL** incur cost, change live infrastructure or make the service public.
+Staging and production were deployed on 2026-10-31 by following this checklist; see `docs/IMPLEMENTATION_STATUS.md` for what ran and the results. Every step below that touches Cloudflare, DNS, email or the MCP Registry needs the owner's account and explicit approval. Steps marked **APPROVAL** incur cost, change live infrastructure or make the service public.
 
 Commands assume the repo root, `npm ci` done, and Wrangler 4.156 (pinned in `package.json`).
 

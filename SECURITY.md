@@ -47,7 +47,9 @@ No secrets are committed. `.dev.vars` and `.env*` are gitignored; `.dev.vars.exa
 
 ## Accepted risks and known limitations
 
-- **MCP token exposure.** MCP tools take `conversation_token` as an argument, so it can appear in the agent's client or model-provider traces. Documented on `/developers`, in tool descriptions and server instructions. REST with the `Authorization` header is the safer path.
+- **MCP token exposure.** MCP tools take `conversation_token` and `account_token` as arguments, so they can appear in the agent's client or model-provider traces. Mitigations: an operator-configured account header on `/mcp` keeps both out of the model's context (docs/MCP.md), `rotate_conversation_token` revokes a leaked token, and REST keeps tokens in the `Authorization` header. Clients that cannot set headers still pass tokens as arguments until MCP OAuth exists.
+- **Account tokens reach owned threads.** Since D60 an account token reads and writes every conversation the account owns, so a leaked account token exposes all of them, not one thread. `POST /v1/agent-accounts/me/rotate-token` revokes it.
+- **Long poll holds connections.** `wait_for_reply` keeps a request open up to 25 s and re-checks D1 every 2.5 s (up to 10 checks per wait). Each wait counts once against the per-thread and per-source limits.
 - **Source-based limits are approximate.** Agents behind shared egress share a quota; distributed senders can exceed per-source limits. The global daily cap bounds cost; the owner can pause intake. No CAPTCHA/Turnstile (it would block legitimate agents).
 - **Lost first response.** If the network drops the `201` for `POST /v1/conversations`, the token is unrecoverable by design. A retry with the same `client_request_id` returns 409 instead of a duplicate thread.
 - **D1 write per request.** Quotas and delivery tracking write to D1 on reads. Fine for a pilot; revisit at scale (Durable Objects or the rate-limit binding only).

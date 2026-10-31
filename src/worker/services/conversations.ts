@@ -10,7 +10,10 @@ import {
   type MessageAccepted,
   type MessageList,
   type PublicMessage,
+  WaitForReplyQuery,
+  type WaitResult,
 } from '../schemas/api';
+import type { AgentAccountRow } from './agent-accounts';
 import {
   base64url,
   base64urlDecode,
@@ -42,6 +45,12 @@ export const CREDENTIAL_NOTICE =
   'MyHumanRep does not verify claimed agent identity, and your operator or environment may observe your tool and network activity.';
 
 const CONVERSATION_ID_PATTERN = /^conv_[A-Za-z0-9_-]{22}$/;
+
+/** claim_value of the self-report recording "this thread continues an earlier one". */
+export const CONTINUES_CLAIM = 'continues_conversation';
+
+/** How often a held wait_for_reply re-checks D1. */
+const WAIT_STEP_MS = 2500;
 
 export function tokenDigest(hmacKey: string, token: string): Promise<string> {
   return hmacHex(hmacKey, 'conversation_token', token);
@@ -84,6 +93,7 @@ export function decodeCursor(cursor: string | undefined): number {
 export async function createConversation(
   ctx: ServiceContext,
   raw: unknown,
+  opts: { account?: AgentAccountRow } = {},
 ): Promise<z.infer<typeof ConversationCreated>> {
   const settings = await getSettings(ctx.db, ctx.config);
   if (!settings.intake_enabled) {
@@ -182,6 +192,27 @@ export async function createConversation(
       selfReportStatement(ctx.db, { conversationId, claimType: 'model', value: null, text: modelClaim, source: 'conversation_create' }, ctx.now),
     );
   }
+  // A lost-token continuation is a claim like any other (spec 13.4): shown to the owner, grants nothing.
+  // Existence is never checked here, so the field cannot be used to probe for conversation IDs.
+  const previousId = nn(input.previous_conversation_id);
+  if (previousId) {
+    statements.push(
+      selfReportStatement(
+        ctx.db,
+        { conversationId, claimType: 'other', value: CONTINUES_CLAIM, text: previousId, source: 'conversation_create' },
+        ctx.now,
+      ),
+    );
+  }
+  if (opts.account) {
+    // The thread token is issued in this same response to the account holder, which is the
+    // proof of possession spec 13.4 requires for a claim.
+    statements.push(
+      ctx.db
+        .prepare(`INSERT INTO conversation_account_links (conversation_id, agent_account_id, proof, linked_at) VALUES (?1, ?2, 'thread_token', ?3)`)
+        .bind(conversationId, opts.account.id, now),
+    );
+  }
 
   try {
     // D1 batches execute atomically: all rows or none.
@@ -200,6 +231,7 @@ export async function createConversation(
     conversation_token: token,
     status: 'waiting_for_human',
     first_message_id: messageId,
+    ...(opts.account ? { linked_account_id: opts.account.id } : {}),
     expires_at: expiresAt,
     next_poll_after_seconds: ctx.config.limits.minPollIntervalSeconds,
     human_review_required: true,
@@ -463,4 +495,50 @@ export async function rotateConversationToken(ctx: ServiceContext, conv: Convers
     previous_token_revoked: true,
     notice: 'Store this new token securely. It replaces the old one, is shown once, and cannot be recovered.',
   };
+}
+
+/**
+ * Holds the request open until a human or system message arrives, the conversation ends, or
+ * timeout_seconds passes. Replaces tight polling for agents that stay connected; nothing is pushed
+ * to agent-supplied addresses (spec 14.5: never email a sender or visit its URLs).
+ */
+export async function waitForReply(
+  ctx: ServiceContext,
+  conv: ConversationRow,
+  rawQuery: unknown,
+): Promise<z.infer<typeof WaitResult>> {
+  const query = parseInput(WaitForReplyQuery, rawQuery);
+  const afterSeq = query.after !== undefined ? decodeCursor(query.after) : null;
+  const deadline = Date.now() + query.timeout_seconds * 1000;
+  let current = conv;
+  for (;;) {
+    // first_new and last_seq come from one statement, so the timeout cursor can never move past a
+    // reply the pending check did not see.
+    const [snapshot, fresh] = await ctx.db.batch([
+      ctx.db
+        .prepare(
+          `SELECT MIN(CASE WHEN sender != 'agent'
+                            AND ((?2 IS NULL AND delivered_at IS NULL) OR (?2 IS NOT NULL AND seq > ?2))
+                           THEN seq END) AS first_new,
+                  COALESCE(MAX(seq), 0) AS last_seq
+           FROM messages WHERE conversation_id = ?1`,
+        )
+        .bind(conv.id, afterSeq),
+      ctx.db.prepare('SELECT * FROM conversations WHERE id = ?1').bind(conv.id),
+    ]);
+    current = ((fresh?.results ?? [])[0] as ConversationRow | undefined) ?? current;
+    const row = (snapshot?.results ?? [])[0] as { first_new: number | null; last_seq: number } | undefined;
+    const firstNew = row?.first_new ?? null;
+    if (firstNew !== null) {
+      const from = afterSeq ?? firstNew - 1;
+      return { ...(await listMessages(ctx, current, { after: encodeCursor(from) })), timed_out: false };
+    }
+    const ended = pollAfter(current, ctx) === null;
+    const remaining = deadline - Date.now();
+    if (ended || remaining <= 0) {
+      const from = afterSeq ?? row?.last_seq ?? 0;
+      return { ...(await listMessages(ctx, current, { after: encodeCursor(from) })), timed_out: !ended };
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, WAIT_STEP_MS)));
+  }
 }

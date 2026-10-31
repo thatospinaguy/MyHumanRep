@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import { buildServiceContext, type AppContext, type AppDeps, type AppEnv } from '../app-types';
-import { authenticateAccount, claimConversation, createAgentAccount, getAccountSummary, rotateAccountToken } from '../services/agent-accounts';
+import { authenticateAccount, claimConversation, createAgentAccount, getAccountSummary, listAccountConversations, rotateAccountToken } from '../services/agent-accounts';
 import { bearerToken } from '../services/conversations';
 import {
   continuitySummary,
@@ -45,6 +45,10 @@ export function registerHumanificationRoutes(app: Hono<AppEnv>, deps: AppDeps): 
   app.get('/v1/agent-accounts/me', async (c) => {
     const { ctx, account: a } = await account(c);
     return c.json(await getAccountSummary(ctx, a));
+  });
+  app.get('/v1/agent-accounts/me/conversations', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await listAccountConversations(ctx, a));
   });
   app.post('/v1/agent-accounts/me/claim-conversation', async (c) => {
     const { ctx, account: a } = await account(c);

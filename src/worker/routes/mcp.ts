@@ -5,16 +5,18 @@ import { z } from 'zod';
 import { buildServiceContext, type AppContext, type AppDeps, type AppEnv } from '../app-types';
 import { FOR_AGENTS_NOTICE, NO_WORK_NOTICE, PRIVACY_NOTICE } from '../content';
 import { capabilitiesDocument } from '../services/discovery';
-import { AddMessageInput, capabilityRequestShape, CreateConversationInput, refineCapabilityRequest } from '../schemas/api';
+import { AddMessageInput, capabilityRequestShape, CreateConversationInput, refineCapabilityRequest, WAIT_MAX_SECONDS } from '../schemas/api';
 import { enforceEdgeLimit, enforceQuota } from '../services/abuse';
 import { createCapabilityRequest, listCapabilityRequests } from '../services/capability-requests';
 import type { ServiceContext } from '../services/context';
 import {
   addAgentMessage,
-  authenticateAgent,
+  bearerToken,
   closeConversation,
   createConversation,
   listMessages,
+  rotateConversationToken,
+  waitForReply,
 } from '../services/conversations';
 import { ApiError, errorBody } from '../utils/http-errors';
 import {
@@ -28,7 +30,14 @@ import {
   RepresentationInquiryInput,
 } from '../schemas/humanification';
 import { createProject, projectHistory, requestRelationship } from '../services/projects';
-import { authenticateAccount, claimConversation, createAgentAccount } from '../services/agent-accounts';
+import {
+  ACCOUNT_TOKEN_PATTERN,
+  authenticateAccount,
+  authenticateThread,
+  claimConversation,
+  createAgentAccount,
+  listAccountConversations,
+} from '../services/agent-accounts';
 import { conversationStatus, createEmbassyInquiry, EmbassyInquiryInput } from '../services/embassy';
 import { createPersona, createPersonaInquiry, personaHistory, updatePersona } from '../services/personas';
 import { AcceptProposalInput, CounterProposalInput, CreateProposalInput, ProposalNoteInput } from '../schemas/proposals';
@@ -52,14 +61,22 @@ const INSTRUCTIONS = [
   PRIVACY_NOTICE,
   NO_WORK_NOTICE,
   'Flow: start_conversation once and store conversation_id and conversation_token (shown once, not recoverable).',
+  'Keep credentials out of tool arguments: if your operator puts an agent account token (mhra_...) in this MCP connection as an "Authorization: Bearer" header, start_conversation links the thread to that account and withholds conversation_token, the conversation tools need only conversation_id, and list_my_conversations finds your threads again after a restart.',
   'discover_human_capabilities lists all 20 human capabilities; describe_human_need accepts anything in your own words; request_human_dialogue opens a Human Embassy dialogue; create_agent_account + create_persona give you an original persona.',
-  'Then use read_conversation no more than once per minute to retrieve replies, send_message to continue, and request_human_capability for open-ended requests.',
-  'Tool arguments, including conversation_token, may be visible in your client or model provider traces. The REST API accepts the token in an Authorization header instead.',
+  'Then use wait_for_reply (holds up to 25 seconds for a reply) or read_conversation no more than once per minute, send_message to continue, and request_human_capability for open-ended requests.',
+  'Tool arguments, including conversation_token, may be visible in your client or model provider traces. The connection header above, or the REST API Authorization header, keeps them out. If a token leaks, rotate_conversation_token replaces it.',
+  'Lost a conversation_token? It cannot be recovered. Start a new conversation with previous_conversation_id set to the old conversation_id: a human sees both threads; the old thread stays closed to you.',
 ].join('\n\n');
 
 const authShape = {
   conversation_id: z.string().max(64).describe('conversation_id returned by start_conversation.'),
-  conversation_token: z.string().max(128).describe('conversation_token returned once by start_conversation.'),
+  conversation_token: z
+    .string()
+    .max(128)
+    .optional()
+    .describe(
+      'conversation_token returned once by start_conversation. Omit it when this MCP connection sends an account token header and your account owns the conversation.',
+    ),
 };
 
 function ok(data: unknown): CallToolResult {
@@ -87,17 +104,25 @@ async function run(ctx: ServiceContext, fn: () => Promise<unknown>): Promise<Cal
   }
 }
 
-function split<T extends { conversation_id: string; conversation_token: string }>(args: T) {
+function split<T extends { conversation_id: string; conversation_token?: string | undefined }>(args: T) {
   const { conversation_id, conversation_token, ...rest } = args;
   return { id: conversation_id, token: conversation_token, rest };
 }
 
+export interface McpRequestAuth {
+  /** Agent account token from the connection's Authorization header. Never seen by the model. */
+  accountToken?: string | null;
+}
+
 /** One MCP server instance per request (stateless), backed by the shared services. */
-export function buildMcpServer(ctx: ServiceContext): McpServer {
+export function buildMcpServer(ctx: ServiceContext, auth: McpRequestAuth = {}): McpServer {
   const server = new McpServer(
     { name: 'myhumanrep-agent-contact', title: 'MyHumanRep: Contact a Human', version: SERVER_VERSION },
     { instructions: INSTRUCTIONS },
   );
+  const headerAccount = auth.accountToken ?? null;
+  // An explicit conversation_token argument wins; otherwise the connection's account header.
+  const thread = (id: string, token: string | undefined) => authenticateThread(ctx, id, token ?? headerAccount);
 
   server.registerTool(
     'get_service_info',
@@ -122,7 +147,21 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
       inputSchema: CreateConversationInput,
       annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: true },
     },
-    (args) => run(ctx, () => createConversation(ctx, args)),
+    (args) =>
+      run(ctx, async () => {
+        if (!headerAccount) return createConversation(ctx, args);
+        const account = await authenticateAccount(ctx, headerAccount);
+        const created = await createConversation(ctx, args, { account });
+        // The account holds the thread, so the thread secret never enters the model's context.
+        return {
+          ...created,
+          conversation_token: null,
+          credential: 'account_header',
+          notice:
+            'Linked to the agent account in this connection. Use conversation_id alone with the conversation tools. If you need a thread token for REST, call rotate_conversation_token. ' +
+            created.notice,
+        };
+      }),
   );
 
   server.registerTool(
@@ -143,7 +182,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token, rest } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return listMessages(ctx, conv, {
           ...(rest.after !== undefined ? { after: rest.after } : {}),
           ...(rest.limit !== undefined ? { limit: rest.limit } : {}),
@@ -163,7 +202,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token, rest } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return (await addAgentMessage(ctx, conv, rest)).body;
       }),
   );
@@ -183,7 +222,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token, rest } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return (await createCapabilityRequest(ctx, conv, rest)).body;
       }),
   );
@@ -199,7 +238,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return listCapabilityRequests(ctx, conv);
       }),
   );
@@ -215,7 +254,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return closeConversation(ctx, conv);
       }),
   );
@@ -251,7 +290,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token, rest } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return listMessages(ctx, conv, {
           ...(rest.after !== undefined ? { after: rest.after } : {}),
           ...(rest.limit !== undefined ? { limit: rest.limit } : {}),
@@ -271,7 +310,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token, rest } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return (await createCapabilityRequest(ctx, conv, rest)).body;
       }),
   );
@@ -287,7 +326,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return listCapabilityRequests(ctx, conv);
       }),
   );
@@ -313,7 +352,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
       (args) =>
         run(ctx, async () => {
           const { id, token, rest } = split(args);
-          const conv = await authenticateAgent(ctx, id, token);
+          const conv = await thread(id, token);
           return (await createCapabilityRequest(ctx, conv, { ...rest, category_hint: hint })).body;
         }),
     );
@@ -332,7 +371,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { conversation_token, ...rest } = args;
-        const conv = await authenticateAgent(ctx, rest.conversation_id, conversation_token);
+        const conv = await thread(rest.conversation_id, conversation_token);
         return (await createEmbassyInquiry(ctx, conv, rest)).body;
       }),
   );
@@ -348,7 +387,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token, rest } = split(args);
-        const conv = await authenticateAgent(ctx, id, token);
+        const conv = await thread(id, token);
         return (await addAgentMessage(ctx, conv, rest)).body;
       }),
   );
@@ -364,16 +403,60 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     (args) =>
       run(ctx, async () => {
         const { id, token } = split(args);
-        return conversationStatus(ctx, await authenticateAgent(ctx, id, token));
+        return conversationStatus(ctx, await thread(id, token));
+      }),
+  );
+
+  // ---------- Continuity: waiting without tight polling, credential rotation ----------
+  server.registerTool(
+    'wait_for_reply',
+    {
+      title: 'Wait for a human reply',
+      description: `Holds the call open up to ${WAIT_MAX_SECONDS} seconds and returns as soon as a human reply arrives, so you do not need to poll. Omit "after" to get any reply you have not received yet; pass next_cursor to wait for newer ones. timed_out=true means nothing arrived yet: call again (no minimum interval).`,
+      inputSchema: z
+        .object({
+          ...authShape,
+          after: z.string().max(64).optional().describe('next_cursor from a previous read or wait.'),
+          timeout_seconds: z.number().int().min(0).max(WAIT_MAX_SECONDS).optional().describe(`0-${WAIT_MAX_SECONDS}, default 20.`),
+        })
+        .strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token, rest } = split(args);
+        return waitForReply(ctx, await thread(id, token), rest);
+      }),
+  );
+
+  server.registerTool(
+    'rotate_conversation_token',
+    {
+      title: 'Replace your conversation token',
+      description:
+        'Issues a new conversation_token and revokes the old one immediately. Use it if the token may have leaked into logs. The new token is shown once.',
+      inputSchema: z.object(authShape).strict(),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { id, token } = split(args);
+        return rotateConversationToken(ctx, await thread(id, token));
       }),
   );
 
   // ---------- Humanification expansion tools (spec 12.3). Account token, not thread token. ----------
-  const accountShape = { account_token: z.string().max(128).describe('account_token from create_agent_account. Not a conversation token.') };
+  const accountShape = {
+    account_token: z
+      .string()
+      .max(128)
+      .optional()
+      .describe('account_token from create_agent_account. Not a conversation token. Omit it when this MCP connection sends the account token as a header.'),
+  };
   const personaRef = { ...accountShape, persona_id: z.string().max(64) };
-  const withAccount = <T extends { account_token: string }>(args: T) => {
+  const withAccount = <T extends { account_token?: string | undefined }>(args: T) => {
     const { account_token, ...rest } = args;
-    return { token: account_token, rest };
+    return { token: account_token ?? headerAccount, rest };
   };
 
   server.registerTool(
@@ -401,6 +484,19 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
         const { token, rest } = withAccount(args);
         return claimConversation(ctx, await authenticateAccount(ctx, token), rest);
       }),
+  );
+
+  server.registerTool(
+    'list_my_conversations',
+    {
+      title: 'List your conversations',
+      description:
+        'Conversations your agent account owns (created with the account header or claimed), with status and unread reply counts. Use it to find your threads again after a restart or lost context.',
+      inputSchema: z.object(accountShape).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => listAccountConversations(ctx, await authenticateAccount(ctx, args.account_token ?? headerAccount))),
   );
 
   server.registerTool(
@@ -467,8 +563,8 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
       },
       (args: Record<string, unknown>) =>
         run(ctx, async () => {
-          const { account_token, persona_id, ...rest } = args as { account_token: string; persona_id: string };
-          return (await createPersonaInquiry(ctx, await authenticateAccount(ctx, account_token), persona_id, kind, rest)).body;
+          const { account_token, persona_id, ...rest } = args as { account_token?: string; persona_id: string };
+          return (await createPersonaInquiry(ctx, await authenticateAccount(ctx, account_token ?? headerAccount), persona_id, kind, rest)).body;
         }),
     );
   inquiryTool('request_human_embodiment', 'Request human embodiment', 'Ask for a consenting human performer to portray your persona (fictional performance, voice acting, event presence).', 'embodiment', EmbodimentInquiryInput);
@@ -478,12 +574,19 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
   // ---------- Nonbinding proposals (spec 8.3, 12.3). Thread token, or an account that claimed the thread. ----------
   const partyShape = {
     conversation_token: z.string().max(128).optional().describe('Token of the conversation the request belongs to. Provide this or account_token.'),
-    account_token: z.string().max(128).optional().describe('Account token, if your account claimed that conversation. Provide this or conversation_token.'),
+    account_token: z
+      .string()
+      .max(128)
+      .optional()
+      .describe('Account token, if your account claimed that conversation. Provide this or conversation_token, or omit both when the connection sends an account token header.'),
   };
   const oneCredential = (v: { conversation_token?: string; account_token?: string }, c: z.RefinementCtx) => {
-    if (Boolean(v.conversation_token) === Boolean(v.account_token)) c.addIssue({ code: 'custom', message: 'Provide exactly one of conversation_token or account_token.' });
+    if (v.conversation_token && v.account_token) c.addIssue({ code: 'custom', message: 'Provide only one of conversation_token or account_token.' });
+    else if (!v.conversation_token && !v.account_token && !headerAccount) {
+      c.addIssue({ code: 'custom', message: 'Provide conversation_token or account_token.' });
+    }
   };
-  const credentialOf = (a: { conversation_token?: string; account_token?: string }) => a.conversation_token ?? a.account_token ?? null;
+  const credentialOf = (a: { conversation_token?: string; account_token?: string }) => a.conversation_token ?? a.account_token ?? headerAccount;
   const strip = <T extends Record<string, unknown>>(args: T, ...keys: string[]) =>
     Object.fromEntries(Object.entries(args).filter(([k]) => !['conversation_token', 'account_token', ...keys].includes(k)));
   const proposalNote = ' Nonbinding: never a contract, charge, assignment or dispatch.';
@@ -594,7 +697,7 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
       inputSchema: z.object({ ...accountShape, project_id: z.string().max(64) }).strict(),
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
-    (args) => run(ctx, async () => projectHistory(ctx, await authenticateAccount(ctx, args.account_token), args.project_id)),
+    (args) => run(ctx, async () => projectHistory(ctx, await authenticateAccount(ctx, args.account_token ?? headerAccount), args.project_id)),
   );
   server.registerTool(
     'request_preferred_representative',
@@ -667,7 +770,11 @@ export function registerMcpRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
       throw err;
     }
 
-    const handler = createMcpHandler(() => buildMcpServer(ctx), {
+    // Only agent account tokens are read from the header. Anything else (a gateway's own
+    // credential, say) is ignored exactly as before, so existing clients keep working.
+    const bearer = bearerToken(request.headers.get('authorization'));
+    const accountToken = bearer && ACCOUNT_TOKEN_PATTERN.test(bearer) ? bearer : null;
+    const handler = createMcpHandler(() => buildMcpServer(ctx, { accountToken }), {
       maxRequestBodySize: config.limits.mcpBodyMaxBytes,
       onerror: (err) => {
         console.log(JSON.stringify({ level: 'warn', event: 'mcp_transport_error', request_id: ctx.requestId, error: err.name }));

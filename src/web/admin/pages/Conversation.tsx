@@ -185,6 +185,42 @@ export function Conversation({ id }: { id: string }) {
             <SelfReports reports={data.self_reports} onChanged={reload} />
           </section>
 
+          {(data.continuity.continues.length > 0 || data.continuity.continued_by.length > 0) && (
+            <section className="panel">
+              <h2>Lost-token continuity</h2>
+              <p className="muted small">
+                The sender says these threads belong together. <Unverified /> Linking here shows them to you only; the agent cannot read the
+                other thread. Reply in this thread if you want to carry context over.
+              </p>
+              <ul>
+                {data.continuity.continues.map((p) => (
+                  <li key={p.conversation_id}>
+                    Continues{' '}
+                    {p.exists ? (
+                      <Link to={`/admin/conversations/${p.conversation_id}`}>
+                        <code>{p.conversation_id}</code>
+                      </Link>
+                    ) : (
+                      <>
+                        <code>{p.conversation_id}</code> <span className="muted">(no such conversation)</span>
+                      </>
+                    )}{' '}
+                    {p.subject && <SafeText text={p.subject} />}
+                  </li>
+                ))}
+                {data.continuity.continued_by.map((n) => (
+                  <li key={n.conversation_id}>
+                    Continued in{' '}
+                    <Link to={`/admin/conversations/${n.conversation_id}`}>
+                      <code>{n.conversation_id}</code>
+                    </Link>{' '}
+                    {n.subject && <SafeText text={n.subject} />} <Time iso={n.created_at} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="panel">
             <h2>Triage (private)</h2>
             <div className="stack">

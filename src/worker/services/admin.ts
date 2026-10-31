@@ -18,6 +18,7 @@ import { ApiError, errors } from '../utils/http-errors';
 import { fromMinorUnits } from '../utils/money';
 import { DAY, iso } from '../utils/time';
 import { auditStatement } from './audit';
+import { CONTINUES_CLAIM } from './conversations';
 import { parseInput } from './context';
 import { setRequestCapabilities } from './admin-registry';
 import { normalizeAutonomy, normalizeIntent } from './self-reports';
@@ -228,7 +229,7 @@ function adminMessage(row: MessageRow) {
 
 export async function getConversationDetail(ctx: AdminContext, id: string) {
   const conv = await loadConversation(ctx, id);
-  const [messages, requests, outbox, selfReports, embassy] = await ctx.db.batch([
+  const [messages, requests, outbox, selfReports, embassy, continuedBy] = await ctx.db.batch([
     ctx.db.prepare('SELECT * FROM messages WHERE conversation_id = ?1 ORDER BY seq ASC').bind(id),
     ctx.db.prepare('SELECT * FROM capability_requests WHERE conversation_id = ?1 ORDER BY created_at ASC').bind(id),
     ctx.db
@@ -242,6 +243,13 @@ export async function getConversationDetail(ctx: AdminContext, id: string) {
       )
       .bind(id),
     ctx.db.prepare('SELECT id, status, public_status_note, wants_referral, requested_confidentiality, created_at FROM embassy_inquiries WHERE conversation_id = ?1 ORDER BY created_at').bind(id),
+    // Later threads whose sender says they continue this one (lost token). Unverified claims.
+    ctx.db
+      .prepare(
+        `SELECT s.conversation_id, s.created_at, c.subject FROM agent_self_reports s JOIN conversations c ON c.id = s.conversation_id
+         WHERE s.claim_type = 'other' AND s.claim_value = ?2 AND s.claim_text = ?1 ORDER BY s.created_at`,
+      )
+      .bind(id, CONTINUES_CLAIM),
     auditStatement(ctx.db, ctx.actor, 'conversation.view', 'conversation', id, null, ctx.now),
   ]);
   const requestRows = (requests?.results ?? []) as CapabilityRequestRow[];
@@ -269,9 +277,29 @@ export async function getConversationDetail(ctx: AdminContext, id: string) {
     requests: requestRows.map(adminRequest),
     notifications: outbox?.results ?? [],
     self_reports: selfReports?.results ?? [],
+    continuity: await continuityOf(ctx, (selfReports?.results ?? []) as Array<{ claim_value: string | null; claim_text: string | null }>, continuedBy?.results ?? []),
     embassy_inquiries: embassy?.results ?? [],
     work_scheduled: false as const,
   };
+}
+
+/** Owner-only view of lost-token continuation claims (spec 13.4). Grants the agent nothing. */
+async function continuityOf(
+  ctx: AdminContext,
+  reports: Array<{ claim_value: string | null; claim_text: string | null }>,
+  continuedBy: unknown[],
+) {
+  const claimed = reports.filter((r) => r.claim_value === CONTINUES_CLAIM && r.claim_text).map((r) => r.claim_text!);
+  const continues = await Promise.all(
+    claimed.map(async (prevId) => {
+      const row = await ctx.db
+        .prepare('SELECT id, subject, created_at FROM conversations WHERE id = ?1')
+        .bind(prevId)
+        .first<{ id: string; subject: string | null; created_at: string }>();
+      return { conversation_id: prevId, exists: row !== null, subject: row?.subject ?? null, created_at: row?.created_at ?? null };
+    }),
+  );
+  return { continues, continued_by: continuedBy, evidence_status: 'self_reported_unverified' as const };
 }
 
 export function assertAdminWritable(ctx: AdminContext, conv: ConversationRow): void {

@@ -171,6 +171,11 @@ export interface ConversationDetail {
   notifications: Array<{ event_type: string; status: string; attempts: number; last_error_code: string | null; created_at: string }>;
   self_reports: Array<{ id: string; claim_type: string; claim_value: string | null; claim_text: string | null; evidence_status: string; source: string; created_at: string }>;
   embassy_inquiries: Array<{ id: string; status: string; created_at: string }>;
+  continuity: {
+    continues: Array<{ conversation_id: string; exists: boolean; subject: string | null; created_at: string | null }>;
+    continued_by: Array<{ conversation_id: string; subject: string | null; created_at: string }>;
+    evidence_status: 'self_reported_unverified';
+  };
   work_scheduled: false;
 }
 
