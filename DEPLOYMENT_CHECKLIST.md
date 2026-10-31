@@ -127,6 +127,8 @@ Option A, Cloudflare Email (no third party): enable Email Routing on the zone, v
 
 and set vars `NOTIFY_PROVIDER=cloudflare_email`, `NOTIFY_TO=you@example.com`, `NOTIFY_FROM=alerts@myhumanrep.com` (an address on the zone).
 
+Production does this without `destination_address` (the binding can still only reach verified Email Routing destinations) and with `NOTIFY_TO` as a Worker secret, so the owner address stays out of the repo. Enabling Email Routing replaces any existing MX and SPF records on the zone.
+
 Option B, Resend: verify the sending domain in Resend, set `NOTIFY_PROVIDER=resend`, `NOTIFY_TO`, `NOTIFY_FROM`, and:
 
 ```bash

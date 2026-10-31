@@ -24,7 +24,7 @@ Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
 | 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
 | Staging deployment | Staging deployed (owner-approved, 2026-10-31) | `22d576c` (config on `ddc580c`) | intake opened by owner in `/admin/settings` |
-| Production deployment | Production deployed (owner-approved, 2026-10-31); intake open | `c0518c3` | `INTAKE_ENABLED=true`, `HSTS_ENABLED=true` |
+| Production deployment | Production deployed (owner-approved, 2026-10-31); intake open, email alerts on | `7a565a3` | `INTAKE_ENABLED=true`, `HSTS_ENABLED=true`, `NOTIFY_PROVIDER=cloudflare_email` |
 
 Locked flags cannot be enabled through the admin API (`400`) until their module has code. Disabled modules return `501 not_yet_available`; nothing returns fake success.
 
@@ -125,7 +125,7 @@ DEPLOYMENT_CHECKLIST steps 1-5 and 8 for production; each Cloudflare change appr
 - Public intake opened by the owner (`INTAKE_ENABLED=true`; the `/admin/settings` toggle overrides). `smoke-mcp.ts modern|legacy` then passed every flow check on production (start, read, send, capability request, wrong token rejected, close); `tools/list` stale count only.
 - HSTS (step 9): `max-age=31536000; includeSubDomains` on `myhumanrep.com` and `www`. Not submitted for preload.
 - MCP Registry (step 10): `com.myhumanrep/agent-contact` 2.0.0 published 2026-10-31, status `active`, remote `https://myhumanrep.com/mcp`. Namespace proven by a DNS TXT record (`v=MCPv1; k=ed25519; ...`); the signing key was destroyed after publishing, so the next publish needs a new key and TXT value.
-- Not done: email alerts (step 6). The zone's MX points at `emailfwd.myhumanrep.com`, which has no record (NXDOMAIN), so inbound mail to the domain is not delivered; recommended fix is Cloudflare Email Routing, which also enables `NOTIFY_PROVIDER=cloudflare_email`.
+- Owner alerts (step 6): Cloudflare Email Routing enabled on the zone (replaced the dead WHC MX/SPF; the old MX target `emailfwd.myhumanrep.com` had no record, so inbound mail was not being delivered). Catch-all forwards to the verified owner address. Worker: `send_email` binding without `destination_address`, `NOTIFY_PROVIDER=cloudflare_email`, `NOTIFY_FROM=alerts@myhumanrep.com`, `NOTIFY_TO` as a Worker secret. Verified: an MCP smoke conversation produced `new_conversation` and `capability_request` alerts, both `sent` on attempt 1 and delivered to the owner's Gmail inbox (not spam).
 
 ## Phases 5-8
 
@@ -159,6 +159,5 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 None of these have been done. Each needs the owner's explicit approval:
 
 - HSTS preload; `myhumanrep.ca` aliases (zone not in the Cloudflare account).
-- Real email provider enablement.
 - Any payment processor, live charge, worker recruitment or dispatch.
 - Legal review of the draft consent templates before they are used with real performers.
