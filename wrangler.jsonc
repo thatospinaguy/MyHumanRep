@@ -96,7 +96,7 @@
         {
           "binding": "MHR_DB",
           "database_name": "myhumanrep-agent-contact",
-          "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID",
+          "database_id": "9adc1e10-d132-4f5d-b72a-079dad54f70a",
           "migrations_dir": "migrations"
         }
       ],
