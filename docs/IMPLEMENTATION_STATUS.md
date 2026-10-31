@@ -101,6 +101,7 @@ DEPLOYMENT_CHECKLIST steps 1-4 and 7 for staging only; each Cloudflare change ap
 - Host: `https://staging.myhumanrep.com` (Worker custom domain). `workers_dev` disabled for the staging Worker.
 - D1 `myhumanrep-agent-contact-staging` (`43ceddb2-fa85-4a2b-a197-598401d5f0a7`): migrations `0001`-`0008` applied; 26 expected tables present; `capabilities` = 20.
 - `CONVERSATION_TOKEN_HMAC_KEY` set (generated and piped directly, no copy kept; rotate if lost).
+- `ADMIN_EMAILS` is a Worker secret, not a var, so the owner email is not in the repo.
 - Cloudflare Access app on `/admin` and `/admin/*`, team `dawn-glitter-0fac`, allow policy for the owner email, One-time PIN login.
 - Crons `*/5 * * * *` and `0 4 * * *` scheduled; `outbox_drain` observed firing in `wrangler tail`. `NOTIFY_PROVIDER=none`, so alerts are recorded `disabled`.
 - Smoke results on staging:

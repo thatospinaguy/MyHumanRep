@@ -83,7 +83,6 @@
         "ADMIN_AUTH_MODE": "access",
         "ACCESS_TEAM_DOMAIN": "https://dawn-glitter-0fac.cloudflareaccess.com",
         "ACCESS_AUD": "15cfeea7b2fe64391538e253897989f0da60f8bfd6fad90603bdca883c44bf20",
-        "ADMIN_EMAILS": "cospina86@gmail.com",
         "MCP_ALLOWED_ORIGINS": "",
         "HSTS_ENABLED": "false",
         "NOTIFY_PROVIDER": "none",
