@@ -2,7 +2,7 @@
 
 Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 19 phases and section 20 acceptance tests. Format per spec 21.2.
 
-Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging is deployed from `main` (`ddc580c`) plus staging config; production is not deployed.
+Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging and production are deployed (2026-10-31). Production public intake is closed.
 
 Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 
@@ -24,7 +24,7 @@ Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
 | 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
 | Staging deployment | Staging deployed (owner-approved, 2026-10-31) | `22d576c` (config on `ddc580c`) | intake opened by owner in `/admin/settings` |
-| Production deployment | Not started (needs owner approval) | | |
+| Production deployment | Production deployed (owner-approved, 2026-10-31); intake closed | `70f4f10` (config on `804301e`) | `INTAKE_ENABLED=false` |
 
 Locked flags cannot be enabled through the admin API (`400`) until their module has code. Disabled modules return `501 not_yet_available`; nothing returns fake success.
 
@@ -109,7 +109,20 @@ DEPLOYMENT_CHECKLIST steps 1-4 and 7 for staging only; each Cloudflare change ap
   - `smoke-mcp.ts modern` and `legacy`: all flow checks pass; `tools/list` fails only because the script still expects 7 tools (server exposes 35). Script bug.
   - `verify-openapi.ts`: every route present; 3 reported failures (`/v1/capabilities/{slug}`, `/v1/personas/{persona_id}`, `/v1/consent-templates/{slug}`) are app-level `not_found` for the literal placeholder; real slugs return 200. Script bug.
   - Signed out, `/admin/` and `/admin/api/conversations` redirect to the Access login.
-- Not verified: a third-party MCP client (Claude Desktop/Code) against `/mcp`.
+- Third-party MCP client: claude.ai custom connector against `/mcp` ran the full flow (start, owner reply in `/admin`, read reply).
+
+## Production deployment (2026-10-31)
+
+DEPLOYMENT_CHECKLIST steps 1-5 and 8 for production; each Cloudflare change approved by the owner.
+
+- Hosts: `https://myhumanrep.com` and `https://www.myhumanrep.com` (Worker custom domains; `www` 301-redirects safe GETs to the apex and rejects POST with 400). The owner deleted the WHC parking A/CNAME records first; MX and SPF TXT untouched. `workers_dev` disabled.
+- D1 `myhumanrep-agent-contact` (`9adc1e10-d132-4f5d-b72a-079dad54f70a`): migrations `0001`-`0008` applied; 26 expected tables; `capabilities` = 20.
+- Secrets: `CONVERSATION_TOKEN_HMAC_KEY` (distinct from staging; owner holds the only copy), `ADMIN_EMAILS`.
+- Access app on `myhumanrep.com/admin` and `/admin/*`, owner-only allow policy, One-time PIN.
+- Crons `*/5 * * * *` and `0 4 * * *` scheduled.
+- Verified on the real host: `GET /`, `/for-agents`, `/v1/capabilities`, `/openapi.json`, `/health` all 200; `intake_open=false`; `/admin/` and `/admin/api/conversations` redirect to the Access login when signed out.
+- `smoke-mcp.ts modern|legacy`: connect and `get_service_info` pass; `start_conversation` returns `503 intake_paused` (expected while intake is closed); `tools/list` stale count (script bug). `verify-openapi.ts`: same 3 placeholder false failures as staging.
+- Not done: opening public intake (owner decision), HSTS (step 9), MCP Registry publish (step 10), email alerts (step 6).
 
 ## Phases 5-8
 
@@ -140,10 +153,10 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 
 ## Approvals outstanding (spec 21.4)
 
-None of these have been done for production. Each needs the owner's explicit approval:
+None of these have been done. Each needs the owner's explicit approval:
 
-- Cloudflare production deploy and production D1 migrations (staging done 2026-10-31).
-- Production DNS and domain redirects; production secret and Access config.
+- Opening public intake on production.
+- HSTS enablement and preload; `myhumanrep.ca` aliases (zone not in the Cloudflare account).
 - Real email provider enablement.
 - MCP registry publish.
 - Any payment processor, live charge, worker recruitment or dispatch.
