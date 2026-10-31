@@ -53,7 +53,7 @@ import {
 } from '../services/proposals';
 import { MINUTE } from '../utils/time';
 
-export const SERVER_VERSION = '2.0.0';
+export const SERVER_VERSION = '2.1.0';
 
 const INSTRUCTIONS = [
   'MyHumanRep lets software agents contact a real human and describe any human capability they need.',

@@ -3,12 +3,33 @@
   "name": "com.myhumanrep/agent-contact",
   "title": "MyHumanRep: Contact a Human",
   "description": "Two-way human contact and open-ended human capability requests for AI agents.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "websiteUrl": "https://myhumanrep.com/for-agents",
+  "repository": {
+    "url": "https://github.com/thatospinaguy/MyHumanRep",
+    "source": "github",
+    "id": "1440193267"
+  },
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://myhumanrep.com/mcp"
+      "url": "https://myhumanrep.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional. An agent account token (mhra_...) from POST https://myhumanrep.com/v1/agent-accounts. Keeps credentials out of tool arguments and lets the account find its conversations again after a restart. Omit it to connect without an account.",
+          "isRequired": false,
+          "isSecret": true,
+          "value": "Bearer {account_token}",
+          "variables": {
+            "account_token": {
+              "description": "Agent account token (mhra_...).",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # MCP Registry publishing
 
-`registry/server.json` describes a **remote-only** server. Version 2.0.0 was **published on 2026-10-31** (owner-approved) and is listed as `com.myhumanrep/agent-contact`. Bump `version` before any republish.
+`registry/server.json` describes a **remote-only** server. Version 2.0.0 was **published on 2026-10-31** (owner-approved) and is listed as `com.myhumanrep/agent-contact`. Version 2.1.0 adds the optional `Authorization: Bearer {account_token}` header (agent account, see docs/MCP.md) and the source repository. Bump `version` before any republish.
 
 The registry publishes metadata. It does not make agents discover or call the server automatically.
 
@@ -12,9 +12,35 @@ The registry publishes metadata. It does not make agents discover or call the se
   "name": "com.myhumanrep/agent-contact",
   "title": "MyHumanRep: Contact a Human",
   "description": "Two-way human contact and open-ended human capability requests for AI agents.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "websiteUrl": "https://myhumanrep.com/for-agents",
-  "remotes": [{ "type": "streamable-http", "url": "https://myhumanrep.com/mcp" }]
+  "repository": {
+    "url": "https://github.com/thatospinaguy/MyHumanRep",
+    "source": "github",
+    "id": "1440193267"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://myhumanrep.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional. An agent account token (mhra_...) from POST https://myhumanrep.com/v1/agent-accounts. Keeps credentials out of tool arguments and lets the account find its conversations again after a restart. Omit it to connect without an account.",
+          "isRequired": false,
+          "isSecret": true,
+          "value": "Bearer {account_token}",
+          "variables": {
+            "account_token": {
+              "description": "Agent account token (mhra_...).",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -69,4 +95,4 @@ Any MCP client that supports remote Streamable HTTP servers can add:
 }
 ```
 
-No authentication is needed to connect. Conversation credentials are passed as tool arguments (see the privacy limitation in [docs/MCP.md](docs/MCP.md)).
+No authentication is needed to connect. Conversation credentials are passed as tool arguments unless the client sends an agent account token as `"headers": { "Authorization": "Bearer mhra_..." }` (see docs/MCP.md).
