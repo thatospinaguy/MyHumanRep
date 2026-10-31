@@ -4,6 +4,8 @@ import { errors } from '../utils/http-errors';
 import { DAY, HOUR, iso, MINUTE } from '../utils/time';
 import { assertNotLockedOut, enforceEdgeLimit, enforceQuota, recordAuthFailure } from './abuse';
 import { nn, parseInput, type ServiceContext } from './context';
+import type { ConversationRow } from '../db/rows';
+import { isExpired, publicStatus } from '../db/rows';
 import { authenticateAgent } from './conversations';
 import { requireFlag } from './feature-flags';
 
@@ -145,4 +147,62 @@ export async function assertConversationLinked(ctx: ServiceContext, accountId: s
   if (!row) {
     throw errors.unprocessable('conversation_id must be a conversation your account has claimed.', 'conversation_not_linked');
   }
+}
+
+/**
+ * Thread access with either credential: the conversation's own token, or an account token
+ * (mhra_) whose account claimed this conversation. Unknown and unclaimed conversations fail
+ * identically (T-012, T-024). Same expiry and rate limits as the thread token path.
+ */
+export async function authenticateThread(
+  ctx: ServiceContext,
+  conversationId: string,
+  credential: string | null | undefined,
+): Promise<ConversationRow> {
+  if (typeof credential !== 'string' || !credential.startsWith('mhra_')) {
+    return authenticateAgent(ctx, conversationId, credential);
+  }
+  const account = await authenticateAccount(ctx, credential);
+  const conv = /^conv_[A-Za-z0-9_-]{22}$/.test(conversationId)
+    ? await ctx.db
+        .prepare(
+          `SELECT c.* FROM conversations c JOIN conversation_account_links l ON l.conversation_id = c.id
+           WHERE c.id = ?1 AND l.agent_account_id = ?2`,
+        )
+        .bind(conversationId, account.id)
+        .first<ConversationRow>()
+    : null;
+  if (!conv) {
+    await recordAuthFailure(ctx);
+    throw errors.unauthorizedAccount();
+  }
+  if (isExpired(conv, ctx.now)) throw errors.expired();
+  await enforceEdgeLimit(ctx, 'thread');
+  await enforceQuota(ctx, `thread:${conv.id}`, MINUTE, ctx.config.limits.threadOpsPerMinute, 'rate_limited_thread');
+  return conv;
+}
+
+/** Conversations this account claimed, newest first, with unread reply counts (T-017 after context loss). */
+export async function listAccountConversations(ctx: ServiceContext, account: AgentAccountRow) {
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT c.*, l.linked_at,
+         (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender != 'agent' AND m.delivered_at IS NULL) AS unread_replies
+       FROM conversation_account_links l JOIN conversations c ON c.id = l.conversation_id
+       WHERE l.agent_account_id = ?1 ORDER BY c.created_at DESC LIMIT 200`,
+    )
+    .bind(account.id)
+    .all<ConversationRow & { linked_at: string; unread_replies: number }>();
+  return {
+    account_id: account.id,
+    conversations: results.map((c) => ({
+      conversation_id: c.id,
+      subject: c.subject,
+      status: publicStatus(c, ctx.now),
+      created_at: c.created_at,
+      expires_at: c.expires_at,
+      linked_at: c.linked_at,
+      unread_replies: c.unread_replies,
+    })),
+  };
 }

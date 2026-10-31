@@ -97,6 +97,13 @@ export const CreateConversationInput = z
     client_request_id: idempotencyKey(
       'Optional. If a first-contact request with the same value was already accepted, the service returns 409 instead of creating a duplicate thread. The credential is never re-issued.',
     ).nullish(),
+    previous_conversation_id: z
+      .string()
+      .regex(/^conv_[A-Za-z0-9_-]{22}$/, 'Must be a conversation_id (conv_...).')
+      .describe(
+        'Optional. A conversation you started before and lost the token for. Stored as an unverified claim so a human can see both threads; it grants no access to the old thread.',
+      )
+      .nullish(),
   })
   .strict();
 export type CreateConversationInput = z.infer<typeof CreateConversationInput>;
@@ -220,6 +227,25 @@ export const ListMessagesQuery = z
   })
   .strict();
 
+export const WAIT_MAX_SECONDS = 25;
+
+export const WaitForReplyQuery = z
+  .object({
+    after: z
+      .string()
+      .max(64)
+      .describe('next_cursor from a previous read. Omit to wait for any human reply you have not received yet.')
+      .optional(),
+    timeout_seconds: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(WAIT_MAX_SECONDS)
+      .default(20)
+      .describe(`How long to hold the request open waiting for a reply, 0-${WAIT_MAX_SECONDS} seconds. Default 20.`),
+  })
+  .strict();
+
 // ---------- Responses (documented in OpenAPI and asserted in tests) ----------
 
 export const ErrorResponse = z.object({
@@ -236,6 +262,10 @@ export const ConversationCreated = z.object({
   conversation_token: z.string().describe('Shown once. Store it securely. It cannot be recovered or reissued.'),
   status: PublicConversationStatus,
   first_message_id: z.string(),
+  linked_account_id: z
+    .string()
+    .optional()
+    .describe('Present when the request carried an agent account token: the conversation is already claimed by that account.'),
   expires_at: z.string(),
   next_poll_after_seconds: z.number().int(),
   human_review_required: z.literal(true),
@@ -259,6 +289,10 @@ export const MessageList = z.object({
   next_cursor: z.string().nullable(),
   has_more: z.boolean(),
   next_poll_after_seconds: z.number().int().nullable(),
+});
+
+export const WaitResult = MessageList.extend({
+  timed_out: z.boolean().describe('True when no reply arrived before timeout_seconds. Call again with next_cursor.'),
 });
 
 export const MessageAccepted = z.object({

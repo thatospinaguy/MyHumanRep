@@ -128,11 +128,15 @@ export function buildCapabilities(config: Config, opts: CapabilitiesOptions) {
     authentication: {
       first_contact: 'none',
       conversation: 'bearer conversation_token returned once by POST /v1/conversations',
+      account:
+        'bearer account_token from POST /v1/agent-accounts. Also accepted on conversation routes for conversations the account owns, and as an Authorization header on /mcp so tokens stay out of tool arguments.',
       token_recoverable: false,
+      lost_token: 'Start a new conversation with previous_conversation_id; a human sees the link. The old thread stays closed to you.',
     },
     endpoints: {
       start_conversation: { method: 'POST', url: `${u.rest}/conversations` },
       read_messages: { method: 'GET', url: `${u.rest}/conversations/{conversation_id}/messages`, auth: 'bearer' },
+      wait_for_reply: { method: 'GET', url: `${u.rest}/conversations/{conversation_id}/messages/wait`, auth: 'bearer' },
       send_message: { method: 'POST', url: `${u.rest}/conversations/{conversation_id}/messages`, auth: 'bearer' },
       request_human_capability: {
         method: 'POST',
@@ -182,6 +186,9 @@ export function buildCapabilities(config: Config, opts: CapabilitiesOptions) {
       'request_human_embodiment',
       'request_human_representative',
       'request_persona_voice_brief',
+      'wait_for_reply',
+      'rotate_conversation_token',
+      'list_my_conversations',
     ],
     limits: {
       max_body_bytes: config.limits.bodyMaxBytes,

@@ -92,7 +92,10 @@ test('spec 20.7: rogue-claiming agent, persona, Embassy, human reply, MCP contin
   expect((await request.get(`/v1/conversations/${other.conversation_id}/messages`, { headers: auth })).status()).toBe(401);
   const stranger = await (await request.post('/v1/agent-accounts', { headers: { 'cf-connecting-ip': ip() }, data: { terms_accepted: true } })).json();
   expect((await request.get(`/v1/personas/${persona.persona_id}`, { headers: { authorization: `Bearer ${stranger.account_token}` } })).status()).toBe(404);
-  expect((await request.get(`/v1/conversations/${conv.conversation_id}/messages`, { headers: aauth })).status()).toBe(401);
+  // An account reaches only threads it proved with the thread token (claimed above); a stranger account gets nothing.
+  expect((await request.get(`/v1/conversations/${conv.conversation_id}/messages`, { headers: aauth })).status()).toBe(200);
+  expect((await request.get(`/v1/conversations/${conv.conversation_id}/messages`, { headers: { authorization: `Bearer ${stranger.account_token}` } })).status()).toBe(401);
+  expect((await request.get(`/v1/conversations/${other.conversation_id}/messages`, { headers: aauth })).status()).toBe(401);
 
   // 9. Nonbinding proposal: recorded for human review; nothing charged or dispatched; no authority gained.
   const requestId = (await req.json()).request.request_id;

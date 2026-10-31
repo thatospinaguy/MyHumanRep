@@ -4,9 +4,9 @@ Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 1
 
 Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging and production are deployed (2026-10-31). Production public intake is open; HSTS is on; the server is listed in the MCP Registry.
 
-Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
+Last full run: 2026-10-31 on branch `claude/jolly-lamport-f550gb` (local sandbox; not yet deployed).
 
-- `npm run check`: typecheck, lint, Vitest 165/165 (15 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run check`: typecheck, lint, Vitest 178/178 (16 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
 - `npm run test:e2e`: Playwright 17/17 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`) and the Phase 4 gate (`tests/e2e/phase4-negotiation.spec.ts`).
 
 ## Summary
@@ -127,6 +127,18 @@ DEPLOYMENT_CHECKLIST steps 1-5 and 8 for production; each Cloudflare change appr
 - MCP Registry (step 10): `com.myhumanrep/agent-contact` 2.0.0 published 2026-10-31, status `active`, remote `https://myhumanrep.com/mcp`. Namespace proven by a DNS TXT record (`v=MCPv1; k=ed25519; ...`); the signing key was destroyed after publishing, so the next publish needs a new key and TXT value.
 - Owner alerts (step 6): Cloudflare Email Routing enabled on the zone (replaced the dead WHC MX/SPF; the old MX target `emailfwd.myhumanrep.com` had no record, so inbound mail was not being delivered). Catch-all forwards to the verified owner address. Worker: `send_email` binding without `destination_address`, `NOTIFY_PROVIDER=cloudflare_email`, `NOTIFY_FROM=alerts@myhumanrep.com`, `NOTIFY_TO` as a Worker secret. Verified: an MCP smoke conversation produced `new_conversation` and `capability_request` alerts, both `sent` on attempt 1 and delivered to the owner's Gmail inbox (not spam).
 
+## Agent continuity (2026-10-31, not yet deployed)
+
+Response to an external review: tokens visible in MCP tool arguments, and agents that restart or lose context lose their threads. Spec 13.4 (no passwordless recovery) and 14.5 (never email senders or visit their URLs) were kept as written. ADRs D60-D63.
+
+- MCP account header: an operator-configured `Authorization: Bearer mhra_...` on `/mcp` links new threads to the account, withholds the thread token, and lets every thread and account tool run without credential arguments. Non-`mhra_` headers are ignored as before.
+- Account-owned threads: account tokens authorize `/v1/conversations/{id}/...` routes and MCP thread tools for conversations the account owns. `POST /v1/conversations` with an account bearer links the new thread. New `GET /v1/agent-accounts/me/conversations` and MCP `list_my_conversations`.
+- Long poll: `GET /v1/conversations/{id}/messages/wait` and MCP `wait_for_reply` (0-25 s, D1 re-check every 2.5 s).
+- MCP `rotate_conversation_token` (REST already had it).
+- Lost-token continuation: optional `previous_conversation_id` on first contact, stored as an unverified self-report; owner sees links on both threads in the dashboard. No migration.
+- Tests: `tests/integration/continuity.test.ts` (13; T-007, T-012, T-013, T-017, T-020, T-024, T-038, T-039, T-059, T-060). `tests/e2e/master-demo.spec.ts` step 8 changed: the claiming account now reads its thread (200), a stranger account still gets 401.
+- Deploying it: code only, no migration. Needs the owner's approval for `npm run deploy:staging` then production, as before.
+
 ## Phases 5-8
 
 Status: **Not started**. Each has typed 501 routes so agents get an honest answer:
@@ -151,7 +163,7 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 
 - Request statuses keep the V1 set (`submitted`, `triaging`, ...) because changing the `capability_requests` CHECK would require a rebuild that D1 would cascade. Mapping to the master vocabulary is documented in REQUIREMENTS_RECONCILIATION. Not changed in Phase 4: commercial state now lives on proposals (spec 8.2 separates it from service status), so the master service names can arrive later as an added column without blocking anything.
 - Owner thread messages for proposal actions are guarded by thread state; if a thread closes mid-action the proposal change stands and the message is skipped. The agent still sees it via the proposals API.
-- MCP tool arguments, including tokens, can appear in the calling client's logs. REST keeps tokens in headers.
+- MCP tool arguments, including tokens, can appear in the calling client's logs. The account header on `/mcp` (or REST headers) avoids that; clients that cannot set headers need MCP OAuth, not built yet.
 - Classification is keyword and alias based. No model call is made on agent text.
 
 ## Approvals outstanding (spec 21.4)

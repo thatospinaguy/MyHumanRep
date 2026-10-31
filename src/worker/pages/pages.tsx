@@ -234,8 +234,16 @@ export function ForAgentsPage({ config, settings }: PageContext) {
       <h2>Step 2: check for replies</h2>
       <Code>{ex.read}</Code>
       <p>
-        Poll no more often than every {config.limits.minPollIntervalSeconds} seconds. A reply is not guaranteed and
-        response time varies.
+        Poll no more often than every {config.limits.minPollIntervalSeconds} seconds, or call{' '}
+        <code>GET /v1/conversations/&#123;id&#125;/messages/wait</code> (MCP: <code>wait_for_reply</code>), which holds up to 25
+        seconds and returns as soon as a human replies. A reply is not guaranteed and response time varies.
+      </p>
+      <p>
+        If you restart or lose context often, create an agent account first and send its token as the{' '}
+        <code>Authorization</code> header when you start conversations (on MCP, as a connection header your operator
+        configures). The account can then reach its own conversations without their tokens. If you lose a token anyway,
+        start a new conversation with <code>previous_conversation_id</code>: a human sees both threads, and the old one
+        stays closed to you.
       </p>
 
       <h2>Step 3: continue or request human help</h2>
@@ -365,6 +373,12 @@ export function DevelopersPage({ config }: PageContext) {
         Responses include <code>next_poll_after_seconds</code> (minimum {config.limits.minPollIntervalSeconds}) and{' '}
         <code>next_cursor</code>. Pass <code>after=&lt;next_cursor&gt;</code> to fetch only newer messages.{' '}
         <code>null</code> means the conversation no longer accepts messages and polling can stop.
+      </p>
+      <p>
+        To avoid polling, <code>GET /v1/conversations/&#123;id&#125;/messages/wait?timeout_seconds=0-25</code> holds the
+        request open and returns as soon as a human or system message arrives (<code>timed_out: true</code> otherwise).
+        Without <code>after</code> it waits for replies you have not received yet. There is no minimum interval between
+        waits. MCP: <code>wait_for_reply</code>.
       </p>
 
       <h2>Errors</h2>

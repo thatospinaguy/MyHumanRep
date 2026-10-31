@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { buildServiceContext, type AppContext, type AppDeps, type AppEnv } from '../app-types';
-import { authenticateAgent, addAgentMessage, bearerToken, closeConversation, createConversation, listMessages, rotateConversationToken } from '../services/conversations';
+import { authenticateAccount, authenticateThread } from '../services/agent-accounts';
+import { addAgentMessage, bearerToken, closeConversation, createConversation, listMessages, rotateConversationToken, waitForReply } from '../services/conversations';
 import { conversationStatus, createEmbassyInquiry } from '../services/embassy';
 import { createCapabilityRequest, listCapabilityRequests } from '../services/capability-requests';
 import {
@@ -31,8 +32,11 @@ function methodNotAllowed(allow: string) {
 export function registerConversationRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.post('/v1/conversations', async (c) => {
     const ctx = await buildServiceContext(c, deps, 'rest');
+    // An account token in Authorization links the new thread to that account. Other values are ignored, as before.
+    const bearer = bearerToken(c.req.header('authorization'));
+    const account = bearer?.startsWith('mhra_') ? await authenticateAccount(ctx, bearer) : undefined;
     const body = await readJsonBody(c.req.raw, ctx.config.limits.bodyMaxBytes);
-    const result = await createConversation(ctx, body);
+    const result = await createConversation(ctx, body, account ? { account } : {});
     c.header('Cache-Control', 'no-store');
     return c.json(result, 201);
   });
@@ -40,7 +44,7 @@ export function registerConversationRoutes(app: Hono<AppEnv>, deps: AppDeps): vo
 
   const auth = async (c: AppContext) => {
     const ctx = await buildServiceContext(c, deps, 'rest');
-    const conv = await authenticateAgent(ctx, c.req.param('id') ?? '', bearerToken(c.req.header('authorization')));
+    const conv = await authenticateThread(ctx, c.req.param('id') ?? '', bearerToken(c.req.header('authorization')));
     return { ctx, conv };
   };
 
@@ -56,6 +60,13 @@ export function registerConversationRoutes(app: Hono<AppEnv>, deps: AppDeps): vo
     return c.json(result.body, result.created ? 201 : 200);
   });
   app.all('/v1/conversations/:id/messages', methodNotAllowed('GET, POST'));
+
+  app.get('/v1/conversations/:id/messages/wait', async (c) => {
+    const { ctx, conv } = await auth(c);
+    c.header('Cache-Control', 'no-store');
+    return c.json(await waitForReply(ctx, conv, c.req.query()));
+  });
+  app.all('/v1/conversations/:id/messages/wait', methodNotAllowed('GET'));
 
   app.get('/v1/conversations/:id/capability-requests', async (c) => {
     const { ctx, conv } = await auth(c);
@@ -93,7 +104,7 @@ export function registerConversationRoutes(app: Hono<AppEnv>, deps: AppDeps): vo
     const ctx = await buildServiceContext(c, deps, 'rest');
     const body = await readJsonBody(c.req.raw, ctx.config.limits.bodyMaxBytes);
     const id = body && typeof body === 'object' && typeof (body as { conversation_id?: unknown }).conversation_id === 'string' ? (body as { conversation_id: string }).conversation_id : '';
-    const conv = await authenticateAgent(ctx, id, bearerToken(c.req.header('authorization')));
+    const conv = await authenticateThread(ctx, id, bearerToken(c.req.header('authorization')));
     const result = await createEmbassyInquiry(ctx, conv, body);
     return c.json(result.body, result.created ? 201 : 200);
   });

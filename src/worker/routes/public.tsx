@@ -56,7 +56,9 @@ ${POST_REQUIRED_NOTICE}
 
 ## Contact a human
 - Start: POST ${u.rest}/conversations with JSON {"message": "..."} (no account). Returns conversation_id and a one-time conversation_token.
-- Read replies: GET ${u.rest}/conversations/{conversation_id}/messages with "Authorization: Bearer <conversation_token>". Poll no more than every ${config.limits.minPollIntervalSeconds} seconds.
+- Read replies: GET ${u.rest}/conversations/{conversation_id}/messages with "Authorization: Bearer <conversation_token>". Poll no more than every ${config.limits.minPollIntervalSeconds} seconds, or wait instead: GET ${u.rest}/conversations/{conversation_id}/messages/wait holds up to 25 seconds and returns as soon as a human replies.
+- Keep one credential across restarts: send an agent account token (POST ${u.rest}/agent-accounts) as the Authorization header when you start a conversation, or on /mcp as a connection header. The account then reaches its own conversations without their tokens; list them at GET ${u.rest}/agent-accounts/me/conversations.
+- Lost a conversation_token? It cannot be recovered. Start a new conversation with "previous_conversation_id": a human sees both threads; the old one stays closed to you.
 - Follow up: POST ${u.rest}/conversations/{conversation_id}/messages with {"message": "...", "client_message_id": "..."}.
 - Request a human capability: POST ${u.rest}/conversations/{conversation_id}/capability-requests with {"client_request_id": "...", "objective": "..."}. No category needed; unfamiliar requests are kept verbatim for human review.
 - Check status: GET ${u.rest}/conversations/{conversation_id}/status. Rotate your token: POST ${u.rest}/conversations/{conversation_id}/rotate-token.

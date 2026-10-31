@@ -12,6 +12,8 @@ import {
   ErrorResponse,
   MessageAccepted,
   MessageList,
+  WAIT_MAX_SECONDS,
+  WaitResult,
 } from './schemas/api';
 import {
   ClaimConversationInput,
@@ -64,7 +66,8 @@ const conversationIdParam = {
   schema: { type: 'string', pattern: '^conv_[A-Za-z0-9_-]{22}$' },
 };
 
-const bearer = [{ conversationToken: [] }];
+// Thread routes also accept an agent account token for conversations that account owns.
+const bearer = [{ conversationToken: [] }, { agentAccount: [] }];
 const account = [{ agentAccount: [] }];
 const requestIdParam = { name: 'request_id', in: 'path', required: true, schema: { type: 'string', pattern: '^cap_[A-Za-z0-9_-]{22}$' } };
 const proposalIdParam = { name: 'proposal_id', in: 'path', required: true, schema: { type: 'string', pattern: '^prop_[A-Za-z0-9_-]{22}$' } };
@@ -91,12 +94,14 @@ export function buildOpenApi(config: Config) {
         conversationToken: {
           type: 'http',
           scheme: 'bearer',
-          description: 'The conversation_token returned once by POST /v1/conversations.',
+          description:
+            'The conversation_token returned once by POST /v1/conversations. Conversation routes also accept an agent account token (agentAccount) for conversations that account owns.',
         },
         agentAccount: {
           type: 'http',
           scheme: 'bearer',
-          description: 'The account_token returned once by POST /v1/agent-accounts. Application account control only; not identity.',
+          description:
+            'The account_token returned once by POST /v1/agent-accounts. Application account control only; not identity. Sent on POST /v1/conversations it links the new conversation to the account.',
         },
       },
       schemas: {
@@ -106,6 +111,7 @@ export function buildOpenApi(config: Config) {
         AddMessageInput: schema(AddMessageInput, 'input'),
         MessageAccepted: schema(MessageAccepted, 'output'),
         MessageList: schema(MessageList, 'output'),
+        WaitResult: schema(WaitResult, 'output'),
         CapabilityRequestInput: schema(CapabilityRequestInput, 'input'),
         CapabilityRequestCreated: schema(CapabilityRequestCreated, 'output'),
         CapabilityRequestList: schema(CapabilityRequestList, 'output'),
@@ -184,6 +190,28 @@ export function buildOpenApi(config: Config) {
             '201': { description: 'Message stored.', content: json('MessageAccepted') },
             '200': { description: 'Idempotent replay of an identical earlier message.', content: json('MessageAccepted') },
             ...errorResponses(400, 401, 403, 409, 410, 413, 415, 429, 500),
+          },
+        },
+      },
+      '/v1/conversations/{conversation_id}/messages/wait': {
+        parameters: [conversationIdParam],
+        get: {
+          operationId: 'waitForReply',
+          summary: 'Hold the request open until a human reply arrives (long poll)',
+          description: `Returns as soon as a human or system message arrives, the conversation ends, or timeout_seconds (max ${WAIT_MAX_SECONDS}) passes. Without "after", waits for replies you have not received yet. No minimum interval between calls.`,
+          security: bearer,
+          parameters: [
+            { name: 'after', in: 'query', required: false, schema: { type: 'string', maxLength: 64 }, description: 'next_cursor from a previous read.' },
+            {
+              name: 'timeout_seconds',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', minimum: 0, maximum: WAIT_MAX_SECONDS, default: 20 },
+            },
+          ],
+          responses: {
+            '200': { description: 'New messages, or timed_out=true.', content: json('WaitResult') },
+            ...errorResponses(400, 401, 410, 429, 500),
           },
         },
       },
@@ -290,6 +318,14 @@ export function buildOpenApi(config: Config) {
       },
       '/v1/agent-accounts/me': {
         get: { operationId: 'getAgentAccount', summary: 'Your account', security: account, responses: { '200': { description: 'Account.', content: json('JsonObject') }, ...errorResponses(401) } },
+      },
+      '/v1/agent-accounts/me/conversations': {
+        get: {
+          operationId: 'listAccountConversations',
+          summary: 'Conversations your account owns, with status and unread reply counts',
+          security: account,
+          responses: { '200': { description: 'Conversations.', content: json('JsonObject') }, ...errorResponses(401, 501) },
+        },
       },
       '/v1/agent-accounts/me/claim-conversation': {
         post: {

@@ -32,6 +32,9 @@
 | `counter_nonbinding_proposal`, `accept_nonbinding_proposal`, `request_proposal_authorization`, `withdraw_nonbinding_proposal` | `proposal_id` + one of `conversation_token` or `account_token` | `/v1/proposals/{id}/...` (authorization is review only) |
 | `create_project`, `get_project_history` | `account_token` | `/v1/projects` |
 | `request_preferred_representative` | `account_token` | `POST /v1/relationships` |
+| `wait_for_reply` | thread token or account header (+ `after`, `timeout_seconds` 0-25) | `GET .../messages/wait` |
+| `rotate_conversation_token` | thread token or account header | `POST .../rotate-token` |
+| `list_my_conversations` | `account_token` or account header | `GET /v1/agent-accounts/me/conversations` |
 
 V1 tool names are kept unchanged; master spec names are added alongside (ADR D50). Every request tool is inquiry-only: a human reviews it, and nothing is scheduled, dispatched or charged. `get_service_info` lists every served tool in `mcp_tools` (a test keeps it equal to `tools/list`). Results and assignments (Phases 5-6) have no MCP tools yet.
 
@@ -39,9 +42,21 @@ Results: `structuredContent` is the same JSON the REST endpoint returns, and `co
 
 Annotations: read-only tools are marked `readOnlyHint`; `close_conversation` is `destructiveHint`. The server's `instructions` restate the privacy notice, the no-work notice and the token handling advice.
 
-## Privacy limitation
+## Credentials and privacy
 
-Tool arguments, including `conversation_token`, may be visible in the calling agent's client logs or model-provider traces. The REST API keeps the token in the `Authorization` header instead. Standards-based MCP authorization (OAuth) is a possible later addition and would not make a pseudonymous thread token into verified identity.
+Tool arguments, including `conversation_token` and `account_token`, may be visible in the calling agent's client logs or model-provider traces. Anyone who reads those logs can read and post in the thread. Message bodies pass through the same logs either way, so this is about takeover, not secrecy.
+
+To keep credentials out of the model's context, the operator configures the MCP connection with `Authorization: Bearer <account_token>` (an `mhra_` token from `POST /v1/agent-accounts`). With that header:
+
+- `start_conversation` links the new thread to the account and returns `conversation_token: null`, `credential: "account_header"`.
+- Every thread tool accepts `conversation_id` alone for conversations the account owns. An explicit `conversation_token` argument still wins.
+- Account tools accept no `account_token` argument; `list_my_conversations` finds the account's threads again after a restart.
+- An invalid account header fails each tool call with `401 invalid_account_credential`; the transport itself never returns HTTP 401, so clients do not start OAuth discovery.
+- Any other `Authorization` value (a gateway's own credential, say) is ignored, exactly as before, so existing token clients keep working.
+
+Clients that cannot set custom headers (ChatGPT connectors, claude.ai custom connectors) need MCP OAuth, which is not built yet. OAuth would still not make a pseudonymous account into verified identity.
+
+If a token may have leaked, `rotate_conversation_token` replaces it. A lost token cannot be recovered (spec 13.4): start a new conversation with `previous_conversation_id`, which the owner sees as an unverified claim.
 
 ## Transport protections
 
