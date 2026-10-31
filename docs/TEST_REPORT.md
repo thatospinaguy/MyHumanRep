@@ -7,7 +7,7 @@ Run date: 2026-10-31, local sandbox, branch `claude/upbeat-mayer-9ipp4n`. Nothin
 ```text
 typecheck: PASS   (worker + admin SPA)
 lint: PASS        (eslint .)
-vitest: PASS      (163/163, 15 files, Workers runtime, real local D1 with migrations 0001-0008)
+vitest: PASS      (165/165, 15 files, Workers runtime, real local D1 with migrations 0001-0008)
 playwright: PASS  (17/17, Chromium against a fresh wrangler dev + local D1; full suite run twice)
 build: PASS       (vite build + wrangler deploy --dry-run)
 registry: PASS
@@ -17,7 +17,7 @@ New and changed files:
 
 | File | Tests | Spec IDs |
 |---|---:|---|
-| tests/integration/proposals.test.ts | 8 | T-047, T-048, T-049, T-050; scoping, expiry, limits, flag, owner create, MCP |
+| tests/integration/proposals.test.ts | 10 | T-047, T-048, T-049, T-050; scoping, expiry, limits, flag, owner create, MCP; regressions for expired proposals vs the open limit and a counter racing a withdrawal |
 | tests/integration/projects.test.ts | 3 | Spec 10: cited history without message text or internal notes, account isolation, relationship requests (no activation, no authority), MCP |
 | tests/integration/humanification.test.ts | 18 (+2) | Draft consent templates; T-058 disclosure by context |
 | tests/integration/human-embassy.test.ts | 11 | Later-phase 501 list now covers results, Human Lab intake, representatives, payments |

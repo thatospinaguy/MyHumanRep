@@ -101,6 +101,7 @@ interface Revision {
   required_skills: string[];
   evidence_requirements: string | null;
   cancellation_terms: string | null;
+  confidentiality: string | null;
   price: { amount_minor: number; currency: string } | null;
   valid_until: string;
   changed_fields: string[];
@@ -121,6 +122,47 @@ interface ProposalDetail {
   current_terms: Revision | null;
   revisions: Revision[];
   events: Array<{ event_type: string; actor: string; revision: number | null; note: string | null; created_at: string }>;
+}
+
+/** Every term of one revision, so nothing is accepted unseen. */
+function TermsList({ r }: { r: Revision }) {
+  const none = <span className="muted">none</span>;
+  const list = (items: string[]) => (items.length ? items.map((x, i) => <div key={i}>• <SafeText text={x} /></div>) : none);
+  const text = (v: string | null) => (v ? <SafeText text={v} /> : none);
+  return (
+    <dl className="kv">
+      <dt>Scope</dt>
+      <dd>{text(r.scope_text)}</dd>
+      <dt>Deliverables</dt>
+      <dd>{list(r.deliverables)}</dd>
+      <dt>Timing</dt>
+      <dd>{text(r.timing_text)}</dd>
+      <dt>Location</dt>
+      <dd>{text(r.location_text)}</dd>
+      <dt>Required skills</dt>
+      <dd>{list(r.required_skills)}</dd>
+      <dt>Evidence</dt>
+      <dd>{text(r.evidence_requirements)}</dd>
+      <dt>Cancellation</dt>
+      <dd>{text(r.cancellation_terms)}</dd>
+      <dt>Confidentiality</dt>
+      <dd>{r.confidentiality ? label(r.confidentiality) : none}</dd>
+      <dt>Price (nonbinding)</dt>
+      <dd>{formatPrice(r.price?.amount_minor, r.price?.currency)}</dd>
+      <dt>Valid until</dt>
+      <dd>
+        <Time iso={r.valid_until} />
+      </dd>
+      {r.note && (
+        <>
+          <dt>Note</dt>
+          <dd>
+            <SafeText text={r.note} />
+          </dd>
+        </>
+      )}
+    </dl>
+  );
 }
 
 /** Terms form shared by "create" and "counter". Empty fields are left unchanged on a counter. */
@@ -238,7 +280,13 @@ export function ProposalDetailPage({ id }: { id: string }) {
                       <SafeText text={r.timing_text} /> · <SafeText text={r.location_text} />
                     </td>
                     <td>{formatPrice(r.price?.amount_minor, r.price?.currency)}</td>
-                    <td>{r.changed_fields.length ? r.changed_fields.map(label).join(', ') : <span className="muted">initial</span>}</td>
+                    <td>
+                      {r.changed_fields.length ? r.changed_fields.map(label).join(', ') : <span className="muted">initial</span>}
+                      <details>
+                        <summary>All terms</summary>
+                        <TermsList r={r} />
+                      </details>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -263,6 +311,12 @@ export function ProposalDetailPage({ id }: { id: string }) {
           </section>
         </div>
         <aside>
+          {p.current_terms && (
+            <section className="panel">
+              <h2>Current terms (revision {p.current_revision}, by {p.current_terms.actor})</h2>
+              <TermsList r={p.current_terms} />
+            </section>
+          )}
           {canAccept && (
             <section className="panel">
               <h2>Accept terms (nonbinding)</h2>

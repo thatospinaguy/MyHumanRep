@@ -305,14 +305,19 @@ function revisionInsert(
   changed: string[],
   note: string | null,
   idem: { key: string | null; hash: string | null },
+  guard?: { status: ProposalStatus; revision: number },
 ): D1PreparedStatement {
   const material = changed.some((c) => (MATERIAL_FIELDS as readonly string[]).includes(c));
+  // With a guard, the row is written only if the proposal is still in the state the caller read.
+  const tail = guard
+    ? 'SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20 WHERE EXISTS (SELECT 1 FROM proposals WHERE id = ?1 AND status = ?21 AND current_revision = ?22)'
+    : 'VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)';
   return ctx.db
     .prepare(
       `INSERT INTO proposal_revisions (proposal_id, revision, actor_type, scope_text, deliverables_json, timing_text, location_text,
          required_skills_json, evidence_requirements, cancellation_terms, confidentiality, price_minor, currency, valid_until,
          changed_fields_json, material_change, note, client_request_id, payload_hash, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)`,
+       ${tail}`,
     )
     .bind(
       proposalId,
@@ -335,6 +340,7 @@ function revisionInsert(
       idem.key,
       idem.hash,
       iso(ctx.now),
+      ...(guard ? [guard.status, guard.revision] : []),
     );
 }
 
@@ -361,8 +367,12 @@ export async function createProposalCore(
 ) {
   assertRequestOpen(request);
   const open = await ctx.db
-    .prepare(`SELECT COUNT(*) AS n FROM proposals WHERE capability_request_id = ?1 AND status IN ('proposed','countered','terms_agreed_nonbinding','awaiting_authorization')`)
-    .bind(request.id)
+    // Past-due proposals are expired even if nobody has read them since (expiry is otherwise applied on access).
+    .prepare(
+      `SELECT COUNT(*) AS n FROM proposals WHERE capability_request_id = ?1
+         AND status IN ('proposed','countered','terms_agreed_nonbinding','awaiting_authorization') AND expires_at > ?2`,
+    )
+    .bind(request.id, iso(ctx.now))
     .first<{ n: number }>();
   if ((open?.n ?? 0) >= MAX_OPEN_PER_REQUEST) {
     throw errors.conflict(`At most ${MAX_OPEN_PER_REQUEST} open proposals per request. Counter or withdraw an existing one.`, 'proposal_limit_reached');
@@ -404,27 +414,38 @@ export async function counterCore(
   const until = validUntil(ctx, input.valid_days);
   const wasAgreed = p.status === 'terms_agreed_nonbinding' || p.status === 'awaiting_authorization';
   const now = iso(ctx.now);
+  // Every statement is guarded on the state that was read: a concurrent counter fails on the (proposal_id, revision)
+  // primary key, and a concurrent withdraw/decline makes the guarded insert and update match nothing, so a closed
+  // proposal is never reopened and no partial history is written.
+  const afterCounter = `WHERE EXISTS (SELECT 1 FROM proposals WHERE id = ?2 AND status = 'countered' AND current_revision = ?5 AND updated_at = ?7)`;
+  const guardedEvent = (type: string, actorType: string, revision: number | null, note: string | null) =>
+    ctx.db
+      .prepare(`INSERT INTO proposal_events (id, proposal_id, event_type, actor_type, revision, note, created_at) SELECT ?1, ?2, ?3, ?4, ?8, ?6, ?7 ${afterCounter}`)
+      .bind(newId('pevt'), p.id, type, actorType, next, note, now, revision);
   const statements = [
-    // The (proposal_id, revision) primary key makes concurrent counters fail instead of forking history.
-    revisionInsert(ctx, p.id, next, actor, terms, until, changed, nn(input.note) ?? null, idem),
+    revisionInsert(ctx, p.id, next, actor, terms, until, changed, nn(input.note) ?? null, idem, { status: p.status, revision: p.current_revision }),
     ctx.db
       .prepare(
         `UPDATE proposals SET status = 'countered', current_revision = ?2, agreed_revision = NULL, expires_at = ?3, updated_at = ?4
-         WHERE id = ?1 AND current_revision = ?5`,
+         WHERE id = ?1 AND current_revision = ?5 AND status = ?6`,
       )
-      .bind(p.id, next, until, now, p.current_revision),
+      .bind(p.id, next, until, now, p.current_revision, p.status),
     ...(wasAgreed
-      ? [eventInsert(ctx, p.id, 'agreement_invalidated', 'system', p.agreed_revision, `Terms changed (${changed.join(', ')}); both sides must accept the new revision.`)]
+      ? [guardedEvent('agreement_invalidated', 'system', p.agreed_revision, `Terms changed (${changed.join(', ')}); both sides must accept the new revision.`)]
       : []),
-    eventInsert(ctx, p.id, 'countered', actor, next, null),
-    ...extra(next),
+    guardedEvent('countered', actor, next, null),
   ];
+  let results: D1Result[];
   try {
-    await ctx.db.batch(statements);
+    results = await ctx.db.batch(statements);
   } catch (e) {
     if (isConstraint(e)) throw errors.conflict('The proposal changed while saving. Read it again and retry.', 'state_changed');
     throw e;
   }
+  if ((results[0]?.meta.changes ?? 0) !== 1) throw errors.conflict('The proposal changed while saving. Read it again and retry.', 'state_changed');
+  // Side effects (thread notice, alert, audit) only after the guarded change won.
+  const after = extra(next);
+  if (after.length > 0) await ctx.db.batch(after);
   return { revision: next, agreement_invalidated: wasAgreed, changed_fields: changed };
 }
 

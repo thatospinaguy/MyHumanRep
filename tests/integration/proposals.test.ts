@@ -2,6 +2,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
+import { counterCore, loadProposalBundle } from '../../src/worker/services/proposals';
 import { json, makeHarness, startConversation, type Harness } from '../helpers';
 
 type Thread = Awaited<ReturnType<typeof startConversation>>;
@@ -206,6 +207,34 @@ describe('nonbinding proposals', () => {
     expect('internal_notes' in (await json(await h.fetch(`/v1/proposals/${p.proposal_id}`, { headers: c.auth })))).toBe(false);
     const audit = (await env.MHR_DB.prepare("SELECT action FROM admin_audit WHERE target_type = 'proposal'").all<{ action: string }>()).results.map((r) => r.action);
     expect(audit).toContain('proposal.create');
+  });
+});
+
+describe('proposal race and expiry regressions', () => {
+  it('past-due proposals do not count against the open limit, even if nobody read them', async () => {
+    const h = await makeHarness();
+    const c = await startConversation(h);
+    const rid = await request(h, c);
+    for (const key of ['a', 'b', 'c']) expect((await propose(h, c, rid, { client_request_id: key, valid_days: 1 })).status).toBe(201);
+    h.clock.advance(2 * 86_400_000);
+    // No read in between: creation itself must treat them as expired.
+    expect((await propose(h, c, rid, { client_request_id: 'd' })).status).toBe(201);
+  });
+
+  it('a counteroffer racing a withdrawal never reopens the closed proposal or writes partial history', async () => {
+    const h = await makeHarness();
+    const c = await startConversation(h);
+    const rid = await request(h, c);
+    const id = (await json(await propose(h, c, rid))).proposal_id as string;
+    const core = { db: env.MHR_DB, now: new Date(h.clock.now().getTime()) };
+    const stale = (await loadProposalBundle(core, id))!;
+    // The withdrawal commits after the counter read the proposal but before it writes.
+    expect((await post(h, c, `/v1/proposals/${id}/withdraw`)).status).toBe(200);
+    await expect(counterCore(core, stale, 'admin', { timing_text: 'Next week' }, { key: null, hash: null })).rejects.toMatchObject({ code: 'conflict' });
+    const after = await json(await h.fetch(`/v1/proposals/${id}`, { headers: c.auth }));
+    expect(after).toMatchObject({ status: 'cancelled', current_revision: 1 });
+    expect(after.revisions).toHaveLength(1);
+    expect(after.events.map((e: { event_type: string }) => e.event_type)).toEqual(['created', 'withdrawn']);
   });
 });
 

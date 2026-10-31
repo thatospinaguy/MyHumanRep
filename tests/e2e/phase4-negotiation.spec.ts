@@ -20,7 +20,14 @@ test('Phase 4 gate: agent and owner negotiate a nonbinding proposal; nothing is 
   // 1. Agent proposes scope and price over REST.
   const created = await request.post(`/v1/requests/${requestId}/proposals`, {
     headers: agent.headers,
-    data: { client_request_id: 'gp1', scope_text: 'Exterior photos of 12 Main St, no entry.', timing_text: 'Within 5 days', price: { amount_minor: 15000, currency: 'CAD' } },
+    data: {
+      client_request_id: 'gp1',
+      scope_text: 'Exterior photos of 12 Main St, no entry.',
+      timing_text: 'Within 5 days',
+      deliverables: ['Six daylight photos'],
+      cancellation_terms: 'Free cancellation up to 24 hours before.',
+      price: { amount_minor: 15000, currency: 'CAD' },
+    },
   });
   expect(created.status()).toBe(201);
   const proposalId = (await created.json()).proposal_id as string;
@@ -54,7 +61,12 @@ test('Phase 4 gate: agent and owner negotiate a nonbinding proposal; nothing is 
 
   // 4. Owner sees revision 3 and accepts it (nonbinding).
   await page.reload();
-  await expect(page.getByText('Fine on price if timing can slip.')).toBeVisible();
+  // Every term is visible before acceptance, including ones carried over from earlier revisions.
+  const current = page.locator('section.panel', { has: page.getByRole('heading', { name: /Current terms \(revision 3/ }) });
+  await expect(current.getByText('Fine on price if timing can slip.')).toBeVisible();
+  await expect(current.getByText('Six daylight photos')).toBeVisible();
+  await expect(current.getByText('Free cancellation up to 24 hours before.')).toBeVisible();
+  await expect(current.getByText('Within 10 days')).toBeVisible();
   await page.getByRole('button', { name: 'Accept revision 3' }).click();
   await expect(page.getByText('Terms accepted (nonbinding).')).toBeVisible();
 

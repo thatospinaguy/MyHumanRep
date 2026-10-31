@@ -6,7 +6,7 @@ Status values: `Not started | In progress | Implemented | Tested | Staging deplo
 
 Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 
-- `npm run check`: typecheck, lint, Vitest 163/163 (15 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run check`: typecheck, lint, Vitest 165/165 (15 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
 - `npm run test:e2e`: Playwright 17/17 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`) and the Phase 4 gate (`tests/e2e/phase4-negotiation.spec.ts`).
 
 ## Summary
