@@ -118,7 +118,7 @@ Server-side, stored in settings, toggled in `/admin/settings`. Implemented modul
 
 ## Deployment
 
-See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md). Nothing has been deployed. Production deploy, DNS, Access, email and registry publication all need owner action.
+Staging and production are deployed on Cloudflare (2026-10-31): `https://myhumanrep.com`, MCP at `https://myhumanrep.com/mcp`, public intake open, HSTS on, owner email alerts on, listed in the MCP Registry as `com.myhumanrep/agent-contact`. Current state and smoke results: [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). Steps and approvals: [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md). Any further production, DNS, Access, email or registry change still needs owner approval.
 
 ## Documentation
 
