@@ -89,6 +89,12 @@ Then set in `wrangler.jsonc` for that environment:
 - `ACCESS_AUD`: the AUD tag
 - `ADMIN_EMAILS`: your email (comma-separate if more than one)
 
+To keep the email out of the repo, omit `ADMIN_EMAILS` from `vars` and set it as a secret instead (staging does this). A secret cannot share a name with a deployed var, so deploy without the var first, then:
+
+```bash
+npx wrangler secret put ADMIN_EMAILS --env staging
+```
+
 The Worker independently verifies the `Cf-Access-Jwt-Assertion` signature (team JWKS), issuer, audience and expiry, then checks the email allowlist. Any placeholder or missing value makes `/admin` return 503/403. It never defaults open.
 
 If staging runs on `*.workers.dev`, enable Cloudflare Access for that hostname as well, or use a custom staging hostname such as `staging.myhumanrep.com` (preferred; requires a DNS record).

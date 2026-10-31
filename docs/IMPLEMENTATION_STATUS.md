@@ -2,7 +2,7 @@
 
 Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 19 phases and section 20 acceptance tests. Format per spec 21.2.
 
-Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Nothing is deployed anywhere from this branch.
+Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging is deployed from `main` (`ddc580c`) plus staging config; production is not deployed.
 
 Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 
@@ -23,7 +23,7 @@ Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 | 6 Specialized services, Human Lab | Not started (inquiry-only via capability requests) | | `manual_fulfillment_enabled` (locked off) |
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
 | 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
-| Staging deployment | Not started (needs owner approval) | | |
+| Staging deployment | Staging deployed (owner-approved, 2026-10-31) | `22d576c` (config on `ddc580c`) | intake opened by owner in `/admin/settings` |
 | Production deployment | Not started (needs owner approval) | | |
 
 Locked flags cannot be enabled through the admin API (`400`) until their module has code. Disabled modules return `501 not_yet_available`; nothing returns fake success.
@@ -94,6 +94,23 @@ Status: **Tested**. Gate met: a multi-step negotiation (agent proposal, owner co
 - MCP: `create_nonbinding_proposal`, `counter_nonbinding_proposal`, `accept_nonbinding_proposal`, `request_proposal_authorization`, `withdraw_nonbinding_proposal`, `get_proposal_history`, `create_project`, `get_project_history`, `request_preferred_representative`. The discovery document's `mcp_tools` now lists every served tool (it had listed only the 7 V1 tools), and a test keeps them equal.
 - Not done in Phase 4: master request status names (kept V1 values, see Known limitations); relationship activation and signed performer agreements (Phase 5); enforcing disclosure at agreement time (Phase 5, when agreements exist).
 
+## Staging deployment (2026-10-31)
+
+DEPLOYMENT_CHECKLIST steps 1-4 and 7 for staging only; each Cloudflare change approved by the owner.
+
+- Host: `https://staging.myhumanrep.com` (Worker custom domain). `workers_dev` disabled for the staging Worker.
+- D1 `myhumanrep-agent-contact-staging` (`43ceddb2-fa85-4a2b-a197-598401d5f0a7`): migrations `0001`-`0008` applied; 26 expected tables present; `capabilities` = 20.
+- `CONVERSATION_TOKEN_HMAC_KEY` set (generated and piped directly, no copy kept; rotate if lost).
+- `ADMIN_EMAILS` is a Worker secret, not a var, so the owner email is not in the repo.
+- Cloudflare Access app on `/admin` and `/admin/*`, team `dawn-glitter-0fac`, allow policy for the owner email, One-time PIN login.
+- Crons `*/5 * * * *` and `0 4 * * *` scheduled; `outbox_drain` observed firing in `wrangler tail`. `NOTIFY_PROVIDER=none`, so alerts are recorded `disabled`.
+- Smoke results on staging:
+  - `smoke-rest.ts --wait`: all checks pass, including the owner's admin reply and continuation.
+  - `smoke-mcp.ts modern` and `legacy`: all flow checks pass; `tools/list` fails only because the script still expects 7 tools (server exposes 35). Script bug.
+  - `verify-openapi.ts`: every route present; 3 reported failures (`/v1/capabilities/{slug}`, `/v1/personas/{persona_id}`, `/v1/consent-templates/{slug}`) are app-level `not_found` for the literal placeholder; real slugs return 200. Script bug.
+  - Signed out, `/admin/` and `/admin/api/conversations` redirect to the Access login.
+- Not verified: a third-party MCP client (Claude Desktop/Code) against `/mcp`.
+
 ## Phases 5-8
 
 Status: **Not started**. Each has typed 501 routes so agents get an honest answer:
@@ -123,10 +140,10 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 
 ## Approvals outstanding (spec 21.4)
 
-None of these have been done. Each needs the owner's explicit approval:
+None of these have been done for production. Each needs the owner's explicit approval:
 
-- Cloudflare staging or production deploy, D1 remote migrations (`0003`-`0008` have never run remotely).
-- DNS and domain redirects; secret creation (`CONVERSATION_TOKEN_HMAC_KEY`, Access config).
+- Cloudflare production deploy and production D1 migrations (staging done 2026-10-31).
+- Production DNS and domain redirects; production secret and Access config.
 - Real email provider enablement.
 - MCP registry publish.
 - Any payment processor, live charge, worker recruitment or dispatch.
