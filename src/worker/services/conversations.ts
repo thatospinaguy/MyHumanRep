@@ -512,31 +512,33 @@ export async function waitForReply(
   const deadline = Date.now() + query.timeout_seconds * 1000;
   let current = conv;
   for (;;) {
-    const [pending, fresh] = await ctx.db.batch([
-      afterSeq === null
-        ? ctx.db
-            .prepare(`SELECT MIN(seq) AS seq FROM messages WHERE conversation_id = ?1 AND sender != 'agent' AND delivered_at IS NULL`)
-            .bind(conv.id)
-        : ctx.db
-            .prepare(`SELECT MIN(seq) AS seq FROM messages WHERE conversation_id = ?1 AND sender != 'agent' AND seq > ?2`)
-            .bind(conv.id, afterSeq),
+    // first_new and last_seq come from one statement, so the timeout cursor can never move past a
+    // reply the pending check did not see.
+    const [snapshot, fresh] = await ctx.db.batch([
+      ctx.db
+        .prepare(
+          `SELECT MIN(CASE WHEN sender != 'agent'
+                            AND ((?2 IS NULL AND delivered_at IS NULL) OR (?2 IS NOT NULL AND seq > ?2))
+                           THEN seq END) AS first_new,
+                  COALESCE(MAX(seq), 0) AS last_seq
+           FROM messages WHERE conversation_id = ?1`,
+        )
+        .bind(conv.id, afterSeq),
       ctx.db.prepare('SELECT * FROM conversations WHERE id = ?1').bind(conv.id),
     ]);
     current = ((fresh?.results ?? [])[0] as ConversationRow | undefined) ?? current;
-    const firstNew = ((pending?.results ?? [])[0] as { seq: number | null } | undefined)?.seq ?? null;
+    const row = (snapshot?.results ?? [])[0] as { first_new: number | null; last_seq: number } | undefined;
+    const firstNew = row?.first_new ?? null;
     if (firstNew !== null) {
       const from = afterSeq ?? firstNew - 1;
       return { ...(await listMessages(ctx, current, { after: encodeCursor(from) })), timed_out: false };
     }
     const ended = pollAfter(current, ctx) === null;
-    if (ended || Date.now() + WAIT_STEP_MS > deadline) {
-      const last = await ctx.db
-        .prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM messages WHERE conversation_id = ?1')
-        .bind(conv.id)
-        .first<{ seq: number }>();
-      const from = afterSeq ?? last?.seq ?? 0;
+    const remaining = deadline - Date.now();
+    if (ended || remaining <= 0) {
+      const from = afterSeq ?? row?.last_seq ?? 0;
       return { ...(await listMessages(ctx, current, { after: encodeCursor(from) })), timed_out: !ended };
     }
-    await new Promise((resolve) => setTimeout(resolve, WAIT_STEP_MS));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, WAIT_STEP_MS)));
   }
 }

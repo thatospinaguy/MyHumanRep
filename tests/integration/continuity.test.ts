@@ -194,6 +194,8 @@ describe('wait_for_reply', () => {
     const second = structured(await client.callTool({ name: 'wait_for_reply', arguments: { ...auth, timeout_seconds: 1 } }));
     expect(second.timed_out).toBe(true);
     expect(second.messages).toEqual([]);
+    // Waits the full requested time (PR #7 review), not one poll step short.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(950);
     expect(Date.now() - started).toBeLessThan(5000);
 
     const third = structured(await client.callTool({ name: 'wait_for_reply', arguments: { ...auth, after: first.next_cursor, timeout_seconds: 0 } }));
@@ -213,6 +215,30 @@ describe('wait_for_reply', () => {
     const body = await json(res);
     expect(body.timed_out).toBe(false);
     expect(body.messages.map((m: { body: string }) => m.body)).toEqual(['Arrived mid-wait.']);
+  });
+
+  it('a short timeout still catches a reply that arrives inside it (PR #7 review)', async () => {
+    const h = await makeHarness();
+    const conv = await startConversation(h);
+    const waiting = h.fetch(`/v1/conversations/${conv.conversation_id}/messages/wait?timeout_seconds=2`, { headers: conv.auth });
+    await new Promise((r) => setTimeout(r, 300));
+    await humanReply(h, conv.conversation_id, 'Inside two seconds.');
+    const body = await json(await waiting);
+    expect(body.timed_out).toBe(false);
+    expect(body.messages.map((m: { body: string }) => m.body)).toEqual(['Inside two seconds.']);
+  });
+
+  it('a timed-out cursor never skips a later reply (PR #7 review)', async () => {
+    const h = await makeHarness();
+    const conv = await startConversation(h);
+    const timedOut = await json(await h.fetch(`/v1/conversations/${conv.conversation_id}/messages/wait?timeout_seconds=0`, { headers: conv.auth }));
+    expect(timedOut.timed_out).toBe(true);
+    await humanReply(h, conv.conversation_id, 'After the timeout.');
+    const next = await json(
+      await h.fetch(`/v1/conversations/${conv.conversation_id}/messages/wait?timeout_seconds=0&after=${encodeURIComponent(timedOut.next_cursor)}`, { headers: conv.auth }),
+    );
+    expect(next.timed_out).toBe(false);
+    expect(next.messages.map((m: { body: string }) => m.body)).toEqual(['After the timeout.']);
   });
 
   it('rejects out-of-range timeouts and unauthenticated waits', async () => {
