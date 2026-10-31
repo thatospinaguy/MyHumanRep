@@ -114,8 +114,9 @@
       ],
       "triggers": { "crons": ["*/5 * * * *", "0 4 * * *"] },
       "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
-      // Uncomment after Email Routing is enabled and the owner address is verified.
-      // "send_email": [{ "name": "SEND_EMAIL", "destination_address": "REPLACE_WITH_VERIFIED_OWNER_EMAIL" }],
+      // Email Routing is enabled on the zone. No destination_address here: the binding may send only to
+      // verified Email Routing destinations, and the owner address stays out of the repo (NOTIFY_TO is a secret).
+      "send_email": [{ "name": "SEND_EMAIL" }],
       "vars": {
         "ENVIRONMENT": "production",
         "PUBLIC_BASE_URL": "https://myhumanrep.com",
@@ -128,9 +129,8 @@
         "ACCESS_AUD": "8ad8a180c8a3a1fe6d6c59a3eda0d0e85f5cc7d2680a7a8a44c691525e2615b5",
         "MCP_ALLOWED_ORIGINS": "",
         "HSTS_ENABLED": "true",
-        "NOTIFY_PROVIDER": "none",
-        "NOTIFY_TO": "",
-        "NOTIFY_FROM": ""
+        "NOTIFY_PROVIDER": "cloudflare_email",
+        "NOTIFY_FROM": "alerts@myhumanrep.com"
       }
     }
   }
