@@ -6,7 +6,7 @@ Status values: `Not started | In progress | Implemented | Tested | Staging deplo
 
 Last full run: 2026-10-31 on branch `claude/jolly-lamport-f550gb` (local sandbox), then deployed to production.
 
-- `npm run check`: typecheck, lint, Vitest 178/178 (16 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run check`: typecheck, lint, Vitest 180/180 (16 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
 - `npm run test:e2e`: Playwright 17/17 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`) and the Phase 4 gate (`tests/e2e/phase4-negotiation.spec.ts`).
 
 ## Summary
@@ -139,6 +139,7 @@ Response to an external review: tokens visible in MCP tool arguments, and agents
 - Tests: `tests/integration/continuity.test.ts` (13; T-007, T-012, T-013, T-017, T-020, T-024, T-038, T-039, T-059, T-060). `tests/e2e/master-demo.spec.ts` step 8 changed: the claiming account now reads its thread (200), a stranger account still gets 401.
 - Production deployed 2026-10-31 (owner-approved, staging skipped at the owner's request): commit `976e8ac`, Worker version `218ccb7f-7bc6-4853-a52b-51e07976a535`. Rollback target: `cf9b7ba3-8210-423d-8ca8-05b0ad9a10e6` (`npx wrangler rollback cf9b7ba3-8210-423d-8ca8-05b0ad9a10e6 --env production`).
 - Production smoke (one labelled test account and conversation, closed afterwards): `/health` 200; discovery lists 38 MCP tools including the three new ones; OpenAPI has both new paths; `llms.txt` updated; unauthenticated wait 401. MCP with the account header: `start_conversation` returned `conversation_token: null`, `credential: account_header`, linked to the account; `send_message` without a token argument succeeded; after reconnecting, `list_my_conversations` found the thread; `wait_for_reply` with a 3 s timeout returned `timed_out: true` after 2,968 ms; REST read with the account token 200; a connection with no header and no token got 401; a no-header client still called `get_service_info`; `close_conversation` without a token argument closed the thread. Not verified in production: a reply arriving during a wait (needs an Access login; covered by the integration test).
+- Review fix redeployed 2026-10-31 (owner-approved): commit `24dc424`, Worker version `b3d0c13b-4c5a-4695-ba55-d54883ff1bd3` (rollback target `218ccb7f-7bc6-4853-a52b-51e07976a535`). Codex review on PR #7 found `wait_for_reply` returned before short timeouts and could advance the timeout cursor past an undelivered reply; both fixed with regression tests (Vitest 180/180). Production smoke: header start withheld the token; a 2 s wait returned `timed_out: true` after 2,483 ms (previously immediate); a 0 s wait with the cursor returned at once; `list_my_conversations` found the thread; close without a token argument worked; `/health` 200.
 
 ## Phases 5-8
 

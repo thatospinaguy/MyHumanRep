@@ -7,7 +7,7 @@ Run date: 2026-10-31, local sandbox, branch `claude/jolly-lamport-f550gb`. Nothi
 ```text
 typecheck: PASS   (worker + admin SPA)
 lint: PASS        (eslint .)
-vitest: PASS      (178/178, 16 files, Workers runtime, real local D1 with migrations 0001-0008)
+vitest: PASS      (180/180, 16 files, Workers runtime, real local D1 with migrations 0001-0008)
 playwright: PASS  (17/17, Chromium against a fresh wrangler dev + local D1)
 build: PASS       (vite build + wrangler deploy --dry-run)
 registry: PASS
@@ -15,7 +15,7 @@ registry: PASS
 
 | File | Tests | Spec IDs |
 |---|---:|---|
-| tests/integration/continuity.test.ts | 13 | T-007, T-012, T-013, T-017, T-020, T-024, T-038, T-039, T-059, T-060 |
+| tests/integration/continuity.test.ts | 15 | T-007, T-012, T-013, T-017, T-020, T-024, T-038, T-039, T-059, T-060 |
 | tests/e2e/master-demo.spec.ts | changed | step 8: claiming account reads its thread; stranger account and unowned thread still 401 (D60) |
 
 ## Master spec Phase 4 run
