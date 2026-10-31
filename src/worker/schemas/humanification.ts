@@ -129,3 +129,48 @@ export const MediaBriefInput = z
     budget: inquiryCommon.budget,
   })
   .strict();
+
+// ---------- Projects and relationships (spec 10, 11.8) ----------
+
+const conversationIdList = z
+  .array(z.string().regex(/^conv_[A-Za-z0-9_-]{22}$/))
+  .max(50)
+  .describe('Conversations your account has claimed (POST /v1/agent-accounts/me/claim-conversation).');
+
+export const CreateProjectInput = z
+  .object({
+    title: shortLabel('Project title.', 120),
+    goal: freeText('Shared goal.', 2000).nullish(),
+    persona_id: z.string().regex(/^per_[A-Za-z0-9_-]{22}$/).describe('Optional persona you own.').nullish(),
+    conversation_ids: conversationIdList.optional(),
+  })
+  .strict();
+
+export const UpdateProjectInput = z
+  .object({
+    title: shortLabel('Project title.', 120).optional(),
+    goal: z.union([freeText('Shared goal.', 2000), z.null()]).optional(),
+    persona_id: z.union([z.string().regex(/^per_[A-Za-z0-9_-]{22}$/), z.null()]).optional(),
+    status: z.enum(['active', 'archived']).optional(),
+    add_conversation_ids: conversationIdList.optional(),
+    remove_conversation_ids: conversationIdList.optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: 'Provide at least one field to change.' });
+
+export const RELATIONSHIP_ROLES = ['preferred_representative', 'spokesperson', 'authorized_representative', 'relationship_manager', 'research_partner', 'other'] as const;
+
+export const RelationshipRequestInput = z
+  .object({
+    client_request_id: idempotencyKey('Required idempotency key, unique per account.'),
+    role_type: z.enum(RELATIONSHIP_ROLES),
+    purpose_text: freeText('What the ongoing relationship is for.', 3000),
+    preferred_rep_ref: shortLabel('Optional identifier of a human you worked with before, if you were given one.', 64).nullish(),
+    project_id: z.string().regex(/^proj_[A-Za-z0-9_-]{22}$/).describe('Optional project you own.').nullish(),
+    persona_id: z.string().regex(/^per_[A-Za-z0-9_-]{22}$/).describe('Optional persona you own.').nullish(),
+    requested_scope_text: freeText('What the human would do or say on your behalf.', 3000).nullish(),
+    exclusions_text: freeText('What they must not do.', 2000).nullish(),
+    requested_term_text: shortLabel('How long, e.g. "3 months" or "until the project ends".', 150).nullish(),
+    communication_preference: shortLabel('How you would like to stay in touch, e.g. "this conversation".', 200).nullish(),
+  })
+  .strict();

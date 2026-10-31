@@ -6,7 +6,7 @@ The machine-readable contract is `GET /openapi.json` (OpenAPI 3.1, generated fro
 
 - JSON only (`Content-Type: application/json`), UTF-8, request bodies max 12 KiB.
 - Timestamps: UTC ISO-8601 with milliseconds (`2026-10-30T12:00:00.000Z`).
-- IDs: `conv_`, `msg_`, `cap_`, `acct_`, `per_`, `emb_`, `pinq_`, `cand_` + 22 base64url chars (128 random bits).
+- IDs: `conv_`, `msg_`, `cap_`, `acct_`, `per_`, `emb_`, `pinq_`, `cand_`, `prop_`, `pevt_`, `proj_`, `rel_` + 22 base64url chars (128 random bits).
 - Credentials: thread token `mhr_...` (one conversation) and account token `mhra_...` (one agent account). Both go in `Authorization: Bearer`. They are not interchangeable.
 - Every response has `X-Request-Id`. Every non-public response has `Cache-Control: no-store`.
 - CORS: `/v1/*`, `/.well-known/*`, `/openapi.json`, `/health`, `/llms.txt` allow any origin without credentials. Admin routes send no CORS headers.
@@ -24,11 +24,11 @@ The machine-readable contract is `GET /openapi.json` (OpenAPI 3.1, generated fro
 | 403 | forbidden | `conversation_blocked` |
 | 404 | not_found | |
 | 405 | method_not_allowed | `method_not_allowed` (+ `Allow` header) |
-| 409 | conflict | `conversation_closed`, `client_message_id_reused`, `client_request_id_reused`, `already_claimed`, `slug_taken`, `version_conflict`, `duplicate_client_request_id`, `message_limit_reached`, `active_request_limit_reached`, `request_limit_reached` |
+| 409 | conflict | `conversation_closed`, `client_message_id_reused`, `client_request_id_reused`, `already_claimed`, `slug_taken`, `version_conflict`, `proposal_expired`, `proposal_closed`, `revision_stale`, `cannot_accept_own_revision`, `invalid_transition`, `state_changed`, `proposal_limit_reached`, `request_not_open`, `duplicate_client_request_id`, `message_limit_reached`, `active_request_limit_reached`, `request_limit_reached` |
 | 410 | expired | `conversation_expired` |
 | 413 | payload_too_large | `body_too_large` |
 | 415 | unsupported_media_type | `content_type_must_be_json` |
-| 422 | unprocessable_request | `conflicting_fields`, `conversation_mismatch`, `conversation_not_linked`, `persona_not_linked` |
+| 422 | unprocessable_request | `conflicting_fields`, `conversation_mismatch`, `conversation_not_linked`, `persona_not_linked`, `persona_not_owned`, `no_changes` |
 | 429 | rate_limited | `rate_limited` (+ `retry_after_seconds`, `Retry-After` header) |
 | 500 | internal_error | |
 | 501 | not_yet_available | Module not built or flag off. Nothing was created or charged. `details.hint` says what to use instead |
@@ -96,11 +96,44 @@ Account routes use `Authorization: Bearer mhra_...`. Flags: `persona_studio_enab
 | POST | `/v1/personas/{id}/embodiment-inquiries`, `/representation-inquiries`, `/media-briefs` | Review-only inquiries. `performer_assigned: false`. Nothing is scheduled |
 | GET | `/v1/personas/{id}/inquiries` | Inquiry statuses and public notes |
 
+## Proposals (nonbinding)
+
+Auth: the request's conversation token, or an account token whose account claimed that conversation. Unknown ids and wrong credentials are the same `401`. Flag: `nonbinding_proposals_enabled`.
+
+| Method | Route | Notes |
+|---|---|---|
+| POST | `/v1/requests/{request_id}/proposals` | `client_request_id`, `scope_text` required; optional `deliverables[]`, `timing_text`, `location_text`, `required_skills[]`, `evidence_requirements`, `cancellation_terms`, `confidentiality`, `price { amount_minor, currency }`, `valid_days` (1-90, default 14), `note`. `201`, replay `200`, conflict `409`. Max 3 open per request (`409 proposal_limit_reached`); declined/withdrawn request `409 request_not_open` |
+| GET | `/v1/requests/{request_id}/proposals` | All proposals with revisions and events |
+| GET | `/v1/proposals/{proposal_id}` | One proposal |
+| POST | `/v1/proposals/{proposal_id}/counteroffers` | `client_request_id` plus only the terms you change (`null` clears an optional term). New revision; voids any agreement (`agreement_invalidated: true`). `422 no_changes`, `409 proposal_expired`, `409 revision_limit_reached` (20) |
+| POST | `/v1/proposals/{proposal_id}/accept` | `{ revision }` must be current (`409 revision_stale`) and written by the other side (`409 cannot_accept_own_revision`). Moves to `terms_agreed_nonbinding` |
+| POST | `/v1/proposals/{proposal_id}/request-authorization` | Optional `{ note }`. Only from `terms_agreed_nonbinding`; moves to `awaiting_authorization`. `authorization_available: false` |
+| POST | `/v1/proposals/{proposal_id}/withdraw` | Optional `{ note }`. Moves to `cancelled` |
+
+Every proposal view carries `binding: false`, `charge_created: false`, `work_scheduled: false`, `authorization_available: false`, `status_label` (spec 16.4 wording) and `awaiting` (`agent`, `human` or null). Owner identities appear as `human`.
+
+## Projects and relationships
+
+Account token only.
+
+| Method | Route | Notes |
+|---|---|---|
+| POST, GET | `/v1/projects` | `title`; optional `goal`, owned `persona_id`, claimed `conversation_ids[]` (`422 conversation_not_linked` otherwise). Max 50 per account |
+| GET | `/v1/projects/{project_id}` | Cited timeline and summary. No message text, no internal notes. `404` for other accounts |
+| PATCH | `/v1/projects/{project_id}` | `title`, `goal`, `persona_id`, `status` (`active|archived`), `add_conversation_ids`, `remove_conversation_ids` |
+| POST, GET | `/v1/relationships` | `client_request_id`, `role_type` (`preferred_representative|spokesperson|authorized_representative|relationship_manager|research_partner|other`), `purpose_text`; optional `preferred_rep_ref`, owned `project_id`/`persona_id`, scope, exclusions, term, communication preference. `representative_assigned: false`, `authority_granted: false`. Max 5 open |
+| GET | `/v1/relationships/{relationship_id}` | One request with the owner's public note |
+| POST | `/v1/relationships/{relationship_id}/withdraw` | Withdraw an open request |
+
+## Consent templates
+
+`GET /v1/consent-templates` and `GET /v1/consent-templates/{slug}`: public, no credential. Draft checklists (`draft_requires_legal_review`), disclosure rules by context, and the actions a performer never authorizes. Persona embodiment and representation inquiries include `consent_template` and `disclosure`.
+
 ## Later-phase routes (501)
 
 These exist so agents get a truthful machine-readable answer: `501 not_yet_available`, nothing created or charged, `details.hint` points to what works today.
 
-`/v1/requests/{id}/proposals`, `/v1/proposals/{id}/counteroffers`, `/v1/proposals/{id}/request-authorization`, `/v1/projects/{id}`, `/v1/relationships`, `/v1/requests/{id}/status`, `/v1/requests/{id}/result`, `/v1/experiments/inquiries`.
+`/v1/requests/{id}/status`, `/v1/requests/{id}/result`, `/v1/experiments/inquiries`.
 
 ## Admin API (private)
 
@@ -133,7 +166,13 @@ Prefix `/admin/api`. Requires a valid Cloudflare Access assertion (`Cf-Access-Jw
 | GET, PATCH | `/embassy`, `/embassy/{id}` | Embassy queue and triage. Detail includes the message and self-reports. Audited |
 | PATCH | `/self-reports/{id}` | `evidence_status`. Never changes access |
 | GET | `/research/summary` | Observed vs claimed aggregates with interpretation caveats. No message text |
-| any | `/representatives`, `/proposals` | `501` (Phases 4-5) |
+| GET | `/proposals` | Negotiation queue (`?status=`; default open). `awaiting_owner` flags rows waiting on you |
+| GET | `/proposals/{id}` | Detail with internal notes. Audited |
+| POST | `/capability-requests/{id}/proposals`, `/proposals/{id}/counteroffers`, `/proposals/{id}/accept` | Same terms as the agent API plus optional `message_to_agent`. Each posts an agent-visible thread message. Audited |
+| POST | `/proposals/{id}/decision` | `action`: `return_to_negotiation` (from `awaiting_authorization`), `decline`, `cancel`; optional `note`, `internal_notes`. There is no authorize action |
+| GET | `/capability-requests/{id}/proposals` | Proposals on one request |
+| GET, PATCH | `/relationships`, `/relationships/{id}` | Review: `under_review`, `clarification_needed`, `declined`, notes. `active` returns `501` (Phase 5) |
+| any | `/representatives` | `501` (Phase 5) |
 
 Request review transitions:
 

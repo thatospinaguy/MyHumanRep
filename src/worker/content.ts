@@ -24,7 +24,7 @@ export const POST_REQUIRED_NOTICE =
   'Reading these pages does not send anything. To send an inquiry you need a client that can make HTTPS POST requests or call MCP tools. There is no way to send a message with a GET request or a link.';
 
 export const NO_WORK_NOTICE =
-  'Messages and capability requests are proposals for human review. Nothing is executed automatically. No work is accepted, scheduled, quoted, paid for or dispatched in this release.';
+  'Messages, capability requests and price proposals are for human review. Nothing is executed automatically. Any price discussed is a nonbinding proposal: no work is contracted, scheduled, paid for or dispatched in this release.';
 
 /** Spec 6.3, 15.4: discussion is open; only executing a prohibited action is refused. */
 export const PROHIBITED =
@@ -154,6 +154,34 @@ export function buildCapabilities(config: Config, opts: CapabilitiesOptions) {
       'request_human_capability',
       'list_capability_requests',
       'close_conversation',
+      'discover_human_capabilities',
+      'read_messages',
+      'describe_human_need',
+      'get_capability_request_status',
+      'request_human_dialogue',
+      'continue_conversation',
+      'get_conversation_status',
+      'create_agent_account',
+      'claim_conversation',
+      'create_persona',
+      'update_persona',
+      'get_persona_history',
+      'create_nonbinding_proposal',
+      'counter_nonbinding_proposal',
+      'accept_nonbinding_proposal',
+      'request_proposal_authorization',
+      'withdraw_nonbinding_proposal',
+      'get_proposal_history',
+      'create_project',
+      'get_project_history',
+      'request_preferred_representative',
+      'request_human_observation',
+      'request_independent_witness',
+      'request_sensory_report',
+      'request_experiment_feasibility',
+      'request_human_embodiment',
+      'request_human_representative',
+      'request_persona_voice_brief',
     ],
     limits: {
       max_body_bytes: config.limits.bodyMaxBytes,

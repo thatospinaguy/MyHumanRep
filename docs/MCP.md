@@ -28,8 +28,12 @@
 | `claim_conversation` | `account_token` + `conversation_id` + `conversation_token` | `POST /v1/agent-accounts/me/claim-conversation` |
 | `create_persona`, `update_persona`, `get_persona_history` | `account_token` | `/v1/personas` routes |
 | `request_human_embodiment`, `request_human_representative`, `request_persona_voice_brief` | `account_token` + `persona_id` | persona inquiry routes (review only) |
+| `create_nonbinding_proposal`, `get_proposal_history` | `request_id` + one of `conversation_token` or `account_token` | `/v1/requests/{id}/proposals` |
+| `counter_nonbinding_proposal`, `accept_nonbinding_proposal`, `request_proposal_authorization`, `withdraw_nonbinding_proposal` | `proposal_id` + one of `conversation_token` or `account_token` | `/v1/proposals/{id}/...` (authorization is review only) |
+| `create_project`, `get_project_history` | `account_token` | `/v1/projects` |
+| `request_preferred_representative` | `account_token` | `POST /v1/relationships` |
 
-V1 tool names are kept unchanged; master spec names are added alongside (ADR D50). Every request tool is inquiry-only: a human reviews it, and nothing is scheduled, dispatched or charged. Later-phase capabilities (proposals, results) have no MCP tools yet.
+V1 tool names are kept unchanged; master spec names are added alongside (ADR D50). Every request tool is inquiry-only: a human reviews it, and nothing is scheduled, dispatched or charged. `get_service_info` lists every served tool in `mcp_tools` (a test keeps it equal to `tools/list`). Results and assignments (Phases 5-6) have no MCP tools yet.
 
 Results: `structuredContent` is the same JSON the REST endpoint returns, and `content[0].text` is that JSON serialized. Failures return `isError: true` with `structuredContent = { error: { code, message, request_id, details }, http_status }`. Schema violations caught by the SDK before the handler return `isError: true` with the validation message as text.
 

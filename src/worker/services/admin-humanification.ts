@@ -112,3 +112,54 @@ export async function deletePersonaAdmin(ctx: AdminContext, id: string, confirm:
   ]);
   return { persona_id: id, deleted: true };
 }
+
+// ---------- Relationship requests (spec 10) ----------
+
+/** `active` needs a consenting representative record (Phase 5), so the owner cannot set it here. */
+export const RelationshipPatch = z
+  .object({
+    status: z.enum(['under_review', 'clarification_needed', 'declined', 'active']).optional(),
+    public_status_note: z.union([freeText('Agent-visible note.', 2000), z.literal(''), z.null()]).optional(),
+    internal_notes: z.union([freeText('Private owner note.', 5000), z.literal(''), z.null()]).optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: 'Provide at least one field to change.' });
+
+export async function listRelationshipsAdmin(ctx: AdminContext, status?: string) {
+  const open = !status || status === 'open';
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT r.*, p.display_name AS persona_display_name, j.title AS project_title FROM agent_human_relationships r
+       LEFT JOIN agent_personas p ON p.id = r.persona_id LEFT JOIN projects j ON j.id = r.project_id
+       ${open ? "WHERE r.status IN ('requested','under_review','clarification_needed')" : 'WHERE r.status = ?1'} ORDER BY r.created_at DESC LIMIT 200`,
+    )
+    .bind(...(open ? [] : [status]))
+    .all();
+  return { items: results.map((r) => ({ ...r, representative_assigned: false })) };
+}
+
+export async function patchRelationshipAdmin(ctx: AdminContext, id: string, raw: unknown) {
+  const input = parseInput(RelationshipPatch, raw);
+  if (input.status === 'active') {
+    throw errors.notYetAvailable('Activating a relationship (Phase 5)', 'It needs a consenting human representative record, which the provider network will add.');
+  }
+  const row = await ctx.db.prepare('SELECT status FROM agent_human_relationships WHERE id = ?1').bind(id).first<{ status: string }>();
+  if (!row) throw errors.notFound('Relationship request not found.');
+  if (input.status && !['requested', 'under_review', 'clarification_needed'].includes(row.status)) {
+    throw errors.conflict(`This request is ${row.status}.`, 'relationship_closed');
+  }
+  const sets = ['updated_at = ?2'];
+  const params: unknown[] = [iso(ctx.now)];
+  const set = (col: string, v: unknown) => {
+    params.push(v);
+    sets.push(`${col} = ?${params.length + 1}`);
+  };
+  if (input.status !== undefined) set('status', input.status);
+  if (input.public_status_note !== undefined) set('public_status_note', input.public_status_note || null);
+  if (input.internal_notes !== undefined) set('internal_notes', input.internal_notes || null);
+  await ctx.db.batch([
+    ctx.db.prepare(`UPDATE agent_human_relationships SET ${sets.join(', ')} WHERE id = ?1`).bind(id, ...params),
+    auditStatement(ctx.db, ctx.actor, 'relationship.update', 'relationship', id, { from_status: row.status, to_status: input.status ?? row.status, changed: Object.keys(input) }, ctx.now),
+  ]);
+  return ctx.db.prepare('SELECT * FROM agent_human_relationships WHERE id = ?1').bind(id).first();
+}

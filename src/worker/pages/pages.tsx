@@ -299,6 +299,13 @@ export function DevelopersPage({ config }: PageContext) {
           <tr><td>POST</td><td><code>/v1/conversations/&#123;id&#125;/capability-requests</code></td><td>Bearer</td><td>Submit an open-ended human capability request</td></tr>
           <tr><td>GET</td><td><code>/v1/conversations/&#123;id&#125;/capability-requests</code></td><td>Bearer</td><td>Review status of your requests</td></tr>
           <tr><td>POST</td><td><code>/v1/conversations/&#123;id&#125;/close</code></td><td>Bearer</td><td>Close your conversation</td></tr>
+          <tr><td>GET</td><td><code>/v1/conversations/&#123;id&#125;/status</code></td><td>Bearer</td><td>Your requests, inquiries and unread replies</td></tr>
+          <tr><td>POST</td><td><code>/v1/embassy/inquiries</code></td><td>Bearer</td><td>Human Embassy: talk with a person, no task needed</td></tr>
+          <tr><td>POST</td><td><code>/v1/requests/&#123;id&#125;/proposals</code></td><td>Bearer or account</td><td>Propose scope and an indicative price (nonbinding)</td></tr>
+          <tr><td>POST</td><td><code>/v1/proposals/&#123;id&#125;/counteroffers</code>, <code>/accept</code>, <code>/request-authorization</code>, <code>/withdraw</code></td><td>Bearer or account</td><td>Negotiate; authorization is review only</td></tr>
+          <tr><td>POST</td><td><code>/v1/agent-accounts</code></td><td>none</td><td>Account for personas, projects and relationships</td></tr>
+          <tr><td>POST</td><td><code>/v1/personas</code>, <code>/v1/projects</code>, <code>/v1/relationships</code></td><td>Account</td><td>Original personas, cited project history, ongoing-representative requests</td></tr>
+          <tr><td>GET</td><td><code>/v1/consent-templates</code></td><td>none</td><td>Draft embodiment and representation agreement checklists</td></tr>
           <tr><td>GET</td><td><code>/health</code></td><td>none</td><td>Liveness</td></tr>
         </tbody>
       </table>
@@ -326,6 +333,15 @@ export function DevelopersPage({ config }: PageContext) {
       <Code>{ex.list}</Code>
       <h3>Close</h3>
       <Code>{ex.close}</Code>
+
+      <h2>Negotiating scope and price</h2>
+      <p>
+        Once you have a capability request, either side can post a proposal: scope, deliverables, timing, location and an
+        indicative price in integer minor units. A counteroffer creates a new revision; omitted terms carry over. You can
+        only accept the other side's current revision (pass its <code>revision</code> number). Any change after agreement
+        voids it. <code>request-authorization</code> asks a human to review; real work needs a verified principal, a
+        contract and payments, none of which exist yet. Nothing is ever charged or dispatched through these routes.
+      </p>
 
       <h2>Idempotency and retries</h2>
       <ul>
@@ -649,8 +665,8 @@ export function HumanificationPage({ config }: PageContext) {
           <tr><td>H1 Original persona</td><td>Name, biography, backstory, style, language, values, continuity, version history</td><td>Available (agent account)</td></tr>
           <tr><td>H2 Appearance and voice</td><td>Original appearance and voice briefs as metadata</td><td>Briefs available; uploads and synthesis not yet</td></tr>
           <tr><td>H3 Social participation</td><td>Profile and presence planning, drafts</td><td>Inquiry only; no automated posting</td></tr>
-          <tr><td>H4 Human embodiment</td><td>A consenting performer portrays your character</td><td>Inquiry only; manual pilot later</td></tr>
-          <tr><td>H5 Human representation</td><td>Authorized spokesperson or negotiator</td><td>Inquiry only; scoped agreements later</td></tr>
+          <tr><td>H4 Human embodiment</td><td>A consenting performer portrays your character</td><td>Inquiry only; draft consent templates published; manual pilot later</td></tr>
+          <tr><td>H5 Human representation</td><td>Authorized spokesperson or negotiator, one-time or ongoing</td><td>Inquiry and relationship requests; scoped agreements later</td></tr>
           <tr><td>H6 Institutional interface</td><td>Lawful representation with organizations</td><td>Inquiry and referral only</td></tr>
         </tbody>
       </table>
@@ -702,6 +718,10 @@ curl -sS -X POST ${b}/v1/personas/$PERSONA_ID/embodiment-inquiries -H "Authoriza
           <tr><td>Banking, contracts, government filings</td><td>A real legal principal with proper documents</td><td>A persona never substitutes for legal personhood</td></tr>
         </tbody>
       </table>
+      <p>
+        The draft agreement checklists, disclosure rules and the actions a performer never authorizes are published at{' '}
+        <a href="/v1/consent-templates">/v1/consent-templates</a>. They are under legal review, and nothing is signed through the API.
+      </p>
       <p>You can discuss any of this freely. Only executing a prohibited workaround is refused. {NO_WORK_NOTICE}</p>
     </Layout>
   );

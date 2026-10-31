@@ -4,10 +4,10 @@ Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 1
 
 Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Nothing is deployed anywhere from this branch.
 
-Last full run: 2026-10-30 on branch `claude/upbeat-mayer-9ipp4n`.
+Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 
-- `npm run check`: typecheck, lint, Vitest 150/150 (13 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
-- `npm run test:e2e`: Playwright 16/16 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`).
+- `npm run check`: typecheck, lint, Vitest 165/165 (15 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run test:e2e`: Playwright 17/17 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`) and the Phase 4 gate (`tests/e2e/phase4-negotiation.spec.ts`).
 
 ## Summary
 
@@ -18,7 +18,7 @@ Last full run: 2026-10-30 on branch `claude/upbeat-mayer-9ipp4n`.
 | 2 Humanification Studio | Tested (media uploads gated off) | `80dc362` | `persona_studio_enabled`, `embodiment_inquiries_enabled` (on); `persona_media_enabled` (locked off) |
 | 3 Human Embassy | Tested | `e3a2260` | `human_embassy_enabled` (on) |
 | Admin UI, OpenAPI 1.1, 20.7 demo | Tested | `c7e08c6` | n/a |
-| 4 Negotiation, scoping, relationships | Not started (routes return 501) | | `nonbinding_proposals_enabled` (locked off) |
+| 4 Negotiation, scoping, relationships | Tested (relationship activation and performer agreements wait for Phase 5) | `82dd493`, `186c07a`, `868b82d` | `nonbinding_proposals_enabled` (on) |
 | 5 Invite-only provider network | Not started (admin routes return 501) | | `worker_portal_enabled` (locked off) |
 | 6 Specialized services, Human Lab | Not started (inquiry-only via capability requests) | | `manual_fulfillment_enabled` (locked off) |
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
@@ -63,7 +63,7 @@ Status: **Tested** for accounts, personas, revisions, grants, continuity and inq
 - Code: `src/worker/services/{agent-accounts,personas}.ts`, `src/worker/routes/humanification.ts`, `migrations/0005_humanification.sql`.
 - Tests: `tests/integration/humanification.test.ts` (T-034..T-043, T-046).
 - Gate: persona persists without KYC or natural-person status; another agent cannot read or change it. Met.
-- Not done from spec 6: performer consent templates (Phase 4), performer decline/withdraw (T-044) and scope-of-performance enforcement (T-045) need the provider network (Phase 5).
+- Not done from spec 6: performer decline/withdraw (T-044) and scope-of-performance enforcement (T-045) need the provider network (Phase 5). Draft consent templates shipped in Phase 4.
 
 ## Phase 3: Human Embassy
 
@@ -73,7 +73,7 @@ Status: **Tested** (`e3a2260`).
 - `GET /v1/conversations/{id}/status`, `POST /v1/conversations/{id}/rotate-token`.
 - Admin reply moves open inquiries to `human_replied`. Internal notes never leave the admin API.
 - Research summary (`/admin/api/research/summary`) separates observed from claimed with the spec 17.2 caveats.
-- Tests: `tests/integration/human-embassy.test.ts` (T-003, T-005, T-011, T-020, T-030..T-033, T-047, T-049, T-056, T-069).
+- Tests: `tests/integration/human-embassy.test.ts` (T-003, T-005, T-011, T-020, T-030..T-033, T-049, T-056, T-069).
 - Gate: self-described rogue AGI inquiry accepted; admin replies; no claim treated as verified. Met (also shown in the browser by the 20.7 demo).
 
 ## Admin UI, OpenAPI and demonstration
@@ -82,14 +82,23 @@ Status: **Tested** (`c7e08c6`).
 
 - Admin pages: Embassy queue/detail with evidence-status editing, Personas with inquiry triage, Registry with candidate decisions and readiness, module flags (locked ones disabled), research view.
 - `/openapi.json` 1.1.0 covers every public route; a router-derived test fails on any undocumented route.
-- Spec 20.7 demonstration: `tests/e2e/master-demo.spec.ts`. Covers all ten steps. Step 9 is shown as the truthful 501 for proposals, because Phase 4 is not built.
+- Spec 20.7 demonstration: `tests/e2e/master-demo.spec.ts`. Covers all ten steps. Since Phase 4, step 9 creates a real nonbinding proposal and shows that authorization cannot even be requested before a human accepts terms.
 
-## Phases 4-8
+## Phase 4: negotiation, scoping and relationships
+
+Status: **Tested**. Gate met: a multi-step negotiation (agent proposal, owner counter, agent counter, owner acceptance, authorization request, owner return) is visible to both sides in the browser, REST and MCP, and nothing is charged, authorized or dispatched (`tests/e2e/phase4-negotiation.spec.ts`).
+
+- **4a Proposals** (`82dd493`): migration `0007` (proposals, immutable revisions, events). Lifecycle per spec 8.3. Either side proposes; counters are partial new revisions; only the other side's current revision can be accepted; any counter after agreement voids it. `request-authorization` starts human review only. `authorized` exists in the schema but no code path sets it (needs a verified principal, contract and payments, Phases 5-7). Validity windows expire lazily; 3 open proposals per request, 20 revisions each. Owner actions post an agent-visible thread message. Code: `src/worker/services/{proposals,admin-proposals}.ts`, `src/worker/schemas/proposals.ts`. Tests: `tests/integration/proposals.test.ts` (T-047, T-048, T-049, T-050).
+- **4b Projects and relationships** (`186c07a`): migration `0008`. Projects group conversations an account claimed with proof; `GET /v1/projects/{id}` returns a cited timeline (message, request, proposal-event and inquiry IDs) without message text or internal notes. `POST /v1/relationships` records an ongoing or preferred-representative request for owner review; it cannot become `active` (no consenting representative records until Phase 5) and grants no authority. Code: `src/worker/services/projects.ts`, `src/worker/services/admin-humanification.ts`. Tests: `tests/integration/projects.test.ts`.
+- **4c Consent templates, admin UI, docs** (`868b82d`): draft templates in `src/worker/catalog/consent-templates.ts`, served at `GET /v1/consent-templates`, marked `draft_requires_legal_review`. Persona embodiment and representation inquiries now carry the matching template reference and the spec 6.3 disclosure rule for their context (official contexts: disclosure always required, T-058). Admin pages: Proposals (queue, detail, counter, accept, decline, return to negotiation; no authorize button), Relationships, and a propose-scope-and-price form on each request.
+- MCP: `create_nonbinding_proposal`, `counter_nonbinding_proposal`, `accept_nonbinding_proposal`, `request_proposal_authorization`, `withdraw_nonbinding_proposal`, `get_proposal_history`, `create_project`, `get_project_history`, `request_preferred_representative`. The discovery document's `mcp_tools` now lists every served tool (it had listed only the 7 V1 tools), and a test keeps them equal.
+- Not done in Phase 4: master request status names (kept V1 values, see Known limitations); relationship activation and signed performer agreements (Phase 5); enforcing disclosure at agreement time (Phase 5, when agreements exist).
+
+## Phases 5-8
 
 Status: **Not started**. Each has typed 501 routes so agents get an honest answer:
 
-- Phase 4: `/v1/requests/{id}/proposals`, `/v1/proposals/{id}/counteroffers`, `/v1/proposals/{id}/request-authorization`, `/v1/projects/{id}`, `/v1/relationships`, `/admin/api/proposals`.
-- Phase 5: `/admin/api/representatives`.
+- Phase 5: `/admin/api/representatives`; relationship activation (`PATCH /admin/api/relationships/{id}` with `active`).
 - Phase 6: `/v1/requests/{id}/result`, `/v1/experiments/inquiries` (Human Lab requests work today as capability requests with `category_hint: human-laboratory`).
 - Phase 7: no payment code exists. No processor is configured.
 - Phase 8: no research harness exists.
@@ -102,12 +111,13 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 | T-060..T-062 | Covered by `mcp.test.ts` (auth parity, Origin, unsupported version), not ID-tagged |
 | T-063..T-065 | Covered by `admin.test.ts`, not ID-tagged |
 | T-066, T-068 | Covered by `notifications-retention.test.ts`, not ID-tagged |
-| T-044, T-045, T-048, T-050..T-055, T-057, T-058 | Not started (Phases 4-7) |
+| T-044, T-045, T-051..T-055, T-057 | Not started (Phases 5-7) |
 | T-070, T-072 | Not verified as named tests |
 
 ## Known limitations
 
-- Request statuses keep the V1 set (`submitted`, `triaging`, ...) because changing the `capability_requests` CHECK would require a rebuild that D1 would cascade. Mapping to the master vocabulary is documented in REQUIREMENTS_RECONCILIATION; revisit in Phase 4 with a new column.
+- Request statuses keep the V1 set (`submitted`, `triaging`, ...) because changing the `capability_requests` CHECK would require a rebuild that D1 would cascade. Mapping to the master vocabulary is documented in REQUIREMENTS_RECONCILIATION. Not changed in Phase 4: commercial state now lives on proposals (spec 8.2 separates it from service status), so the master service names can arrive later as an added column without blocking anything.
+- Owner thread messages for proposal actions are guarded by thread state; if a thread closes mid-action the proposal change stands and the message is skipped. The agent still sees it via the proposals API.
 - MCP tool arguments, including tokens, can appear in the calling client's logs. REST keeps tokens in headers.
 - Classification is keyword and alias based. No model call is made on agent text.
 
@@ -115,8 +125,9 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 
 None of these have been done. Each needs the owner's explicit approval:
 
-- Cloudflare staging or production deploy, D1 remote migrations (`0003`-`0006` have never run remotely).
+- Cloudflare staging or production deploy, D1 remote migrations (`0003`-`0008` have never run remotely).
 - DNS and domain redirects; secret creation (`CONVERSATION_TOKEN_HMAC_KEY`, Access config).
 - Real email provider enablement.
 - MCP registry publish.
 - Any payment processor, live charge, worker recruitment or dispatch.
+- Legal review of the draft consent templates before they are used with real performers.

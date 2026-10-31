@@ -189,7 +189,7 @@ export async function listConversations(ctx: AdminContext, raw: unknown, search:
   };
 }
 
-async function loadConversation(ctx: AdminContext, id: string): Promise<ConversationRow> {
+export async function loadConversation(ctx: AdminContext, id: string): Promise<ConversationRow> {
   if (!/^conv_[A-Za-z0-9_-]{1,64}$/.test(id)) throw errors.notFound('Conversation not found.');
   const conv = await ctx.db.prepare('SELECT * FROM conversations WHERE id = ?1').bind(id).first<ConversationRow>();
   if (!conv) throw errors.notFound('Conversation not found.');
@@ -274,7 +274,7 @@ export async function getConversationDetail(ctx: AdminContext, id: string) {
   };
 }
 
-function assertAdminWritable(ctx: AdminContext, conv: ConversationRow): void {
+export function assertAdminWritable(ctx: AdminContext, conv: ConversationRow): void {
   if (conv.blocked_at) throw errors.conflict('This conversation is blocked. Unblock it before replying.', 'conversation_blocked');
   if (conv.closed_at) throw errors.conflict('This conversation is closed. Reopen it before replying.', 'conversation_closed');
   if (isExpired(conv, ctx.now)) {
@@ -288,7 +288,7 @@ function assertAdminWritable(ctx: AdminContext, conv: ConversationRow): void {
  * the insert did, so a concurrent agent close/expiry cannot leave a closed thread with an open
  * status. Put the insert first in the batch and pass the batch result to `assertMessageInserted`.
  */
-function humanMessageStatements(
+export function humanMessageStatements(
   ctx: AdminContext,
   conv: ConversationRow,
   messageId: string,
@@ -316,7 +316,7 @@ function humanMessageStatements(
 }
 
 /** Turns a lost race (conversation closed, blocked or expired mid-request) into the matching 409. */
-async function assertMessageInserted(ctx: AdminContext, result: D1Result | undefined, conversationId: string): Promise<void> {
+export async function assertMessageInserted(ctx: AdminContext, result: D1Result | undefined, conversationId: string): Promise<void> {
   if ((result?.meta.changes ?? 0) === 1) return;
   const fresh = await loadConversation(ctx, conversationId);
   assertAdminWritable(ctx, fresh);
@@ -579,7 +579,7 @@ export async function listRequests(ctx: AdminContext, raw: unknown) {
   };
 }
 
-async function loadRequest(ctx: AdminContext, id: string): Promise<CapabilityRequestRow> {
+export async function loadRequest(ctx: AdminContext, id: string): Promise<CapabilityRequestRow> {
   if (!/^cap_[A-Za-z0-9_-]{1,64}$/.test(id)) throw errors.notFound('Capability request not found.');
   const row = await ctx.db.prepare('SELECT * FROM capability_requests WHERE id = ?1').bind(id).first<CapabilityRequestRow>();
   if (!row) throw errors.notFound('Capability request not found.');

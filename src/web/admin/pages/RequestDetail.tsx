@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type AdminMessage, type AdminRequest } from '../api';
+import { RequestProposals } from './Proposals';
 import { Badge, ErrorBox, Link, Loading, Notice, SafeText, Time, Unverified, label, useAction, useLoad } from '../ui';
 
 interface Detail {
@@ -192,6 +193,7 @@ export function RequestDetail({ id }: { id: string }) {
               </form>
             </section>
           )}
+          <RequestProposals requestId={id} />
           <section className="panel">
             <h2>Private</h2>
             <div className="stack">

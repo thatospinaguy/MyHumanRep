@@ -15,6 +15,18 @@ import {
   revokeGrant,
   updatePersona,
 } from '../services/personas';
+import {
+  createProject,
+  getRelationship,
+  listProjects,
+  listRelationships,
+  projectHistory,
+  requestRelationship,
+  updateProject,
+  withdrawRelationship,
+} from '../services/projects';
+import { CONSENT_TEMPLATES, DISCLOSURE_RULES, NEVER_AUTHORIZED, TEMPLATE_STATUS } from '../catalog/consent-templates';
+import { errors } from '../utils/http-errors';
 import { readJsonBody } from '../utils/body';
 
 /** Agent accounts and Humanification Studio (master spec 6, 11.7). Separate credential from threads. */
@@ -98,5 +110,58 @@ export function registerHumanificationRoutes(app: Hono<AppEnv>, deps: AppDeps): 
   app.get('/v1/personas/:id/inquiries', async (c) => {
     const { ctx, account: a } = await account(c);
     return c.json(await listPersonaInquiries(ctx, a, c.req.param('id')));
+  });
+
+  // Projects and relationship requests (spec 10, 11.8). Account token only.
+  app.post('/v1/projects', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await createProject(ctx, a, await body(c, ctx.config.limits.bodyMaxBytes)), 201);
+  });
+  app.get('/v1/projects', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await listProjects(ctx, a));
+  });
+  app.get('/v1/projects/:id', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await projectHistory(ctx, a, c.req.param('id')));
+  });
+  app.patch('/v1/projects/:id', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await updateProject(ctx, a, c.req.param('id'), await body(c, ctx.config.limits.bodyMaxBytes)));
+  });
+  app.post('/v1/relationships', async (c) => {
+    const { ctx, account: a } = await account(c);
+    const result = await requestRelationship(ctx, a, await body(c, ctx.config.limits.bodyMaxBytes));
+    return c.json(result.body, result.created ? 201 : 200);
+  });
+  app.get('/v1/relationships', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await listRelationships(ctx, a));
+  });
+  app.get('/v1/relationships/:id', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await getRelationship(ctx, a, c.req.param('id')));
+  });
+  app.post('/v1/relationships/:id/withdraw', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await withdrawRelationship(ctx, a, c.req.param('id')));
+  });
+
+  // Draft consent templates (spec 6.5). Public, read-only, no credential.
+  const TEMPLATE_NOTICE =
+    'Draft checklists of what an embodiment or representation agreement must record. Not legal advice; under legal review. No agreement is created or signed through this API in this release.';
+  app.get('/v1/consent-templates', (c) =>
+    c.json({
+      status: TEMPLATE_STATUS,
+      notice: TEMPLATE_NOTICE,
+      never_authorized: NEVER_AUTHORIZED,
+      disclosure_rules: DISCLOSURE_RULES,
+      templates: CONSENT_TEMPLATES.map((t) => ({ slug: t.slug, version: t.version, title: t.title, applies_to_roles: t.applies_to_roles, summary: t.summary, status: TEMPLATE_STATUS })),
+    }),
+  );
+  app.get('/v1/consent-templates/:slug', (c) => {
+    const t = CONSENT_TEMPLATES.find((x) => x.slug === c.req.param('slug'));
+    if (!t) throw errors.notFound('Consent template not found.');
+    return c.json({ ...t, status: TEMPLATE_STATUS, notice: TEMPLATE_NOTICE, never_authorized: NEVER_AUTHORIZED, disclosure_rules: DISCLOSURE_RULES });
   });
 }

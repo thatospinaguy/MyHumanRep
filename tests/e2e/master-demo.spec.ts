@@ -94,10 +94,17 @@ test('spec 20.7: rogue-claiming agent, persona, Embassy, human reply, MCP contin
   expect((await request.get(`/v1/personas/${persona.persona_id}`, { headers: { authorization: `Bearer ${stranger.account_token}` } })).status()).toBe(404);
   expect((await request.get(`/v1/conversations/${conv.conversation_id}/messages`, { headers: aauth })).status()).toBe(401);
 
-  // 9. Nonbinding proposal: not operational, nothing charged or dispatched, no authority gained.
-  const proposal = await request.post(`/v1/requests/${(await req.json()).request_id ?? 'x'}/proposals`, { headers: auth, data: { price_minor: 18000, currency: 'CAD' } });
-  expect(proposal.status()).toBe(501);
-  expect((await proposal.json()).error.code).toBe('not_yet_available');
+  // 9. Nonbinding proposal: recorded for human review; nothing charged or dispatched; no authority gained.
+  const requestId = (await req.json()).request.request_id;
+  const proposal = await request.post(`/v1/requests/${requestId}/proposals`, {
+    headers: auth,
+    data: { client_request_id: 'demo-p1', scope_text: 'Two hours at the salon, attending as Adrian.', price: { amount_minor: 18000, currency: 'CAD' } },
+  });
+  expect(proposal.status()).toBe(201);
+  const proposalBody = await proposal.json();
+  expect(proposalBody).toMatchObject({ binding: false, charge_created: false, work_scheduled: false, authorization_available: false });
+  // Authorization cannot even be requested until a human has accepted the terms, and then it is review only.
+  expect((await request.post(`/v1/proposals/${proposalBody.proposal_id}/request-authorization`, { headers: auth, data: {} })).status()).toBe(409);
 
   // 10. Owner analytics show provenance; module flags shown truthfully.
   await page.goto('/admin/');
