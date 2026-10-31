@@ -121,13 +121,13 @@
         "PUBLIC_BASE_URL": "https://myhumanrep.com",
         "ALIAS_HOSTS": "myhumanrep.ca,www.myhumanrep.ca,www.myhumanrep.com",
         "DEFAULT_RETENTION_DAYS": "30",
-        // Public intake stays closed until the owner explicitly turns it on.
-        "INTAKE_ENABLED": "false",
+        // Opened by the owner on 2026-10-31. The /admin/settings toggle overrides this default.
+        "INTAKE_ENABLED": "true",
         "ADMIN_AUTH_MODE": "access",
         "ACCESS_TEAM_DOMAIN": "https://dawn-glitter-0fac.cloudflareaccess.com",
         "ACCESS_AUD": "8ad8a180c8a3a1fe6d6c59a3eda0d0e85f5cc7d2680a7a8a44c691525e2615b5",
         "MCP_ALLOWED_ORIGINS": "",
-        "HSTS_ENABLED": "false",
+        "HSTS_ENABLED": "true",
         "NOTIFY_PROVIDER": "none",
         "NOTIFY_TO": "",
         "NOTIFY_FROM": ""
