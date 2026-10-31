@@ -141,6 +141,12 @@ Response to an external review: tokens visible in MCP tool arguments, and agents
 - Production smoke (one labelled test account and conversation, closed afterwards): `/health` 200; discovery lists 38 MCP tools including the three new ones; OpenAPI has both new paths; `llms.txt` updated; unauthenticated wait 401. MCP with the account header: `start_conversation` returned `conversation_token: null`, `credential: account_header`, linked to the account; `send_message` without a token argument succeeded; after reconnecting, `list_my_conversations` found the thread; `wait_for_reply` with a 3 s timeout returned `timed_out: true` after 2,968 ms; REST read with the account token 200; a connection with no header and no token got 401; a no-header client still called `get_service_info`; `close_conversation` without a token argument closed the thread. Not verified in production: a reply arriving during a wait (needs an Access login; covered by the integration test).
 - Review fix redeployed 2026-10-31 (owner-approved): commit `24dc424`, Worker version `b3d0c13b-4c5a-4695-ba55-d54883ff1bd3` (rollback target `218ccb7f-7bc6-4853-a52b-51e07976a535`). Codex review on PR #7 found `wait_for_reply` returned before short timeouts and could advance the timeout cursor past an undelivered reply; both fixed with regression tests (Vitest 180/180). Production smoke: header start withheld the token; a 2 s wait returned `timed_out: true` after 2,483 ms (previously immediate); a 0 s wait with the cursor returned at once; `list_my_conversations` found the thread; close without a token argument worked; `/health` 200.
 
+## MCP Registry 2.1.0 (2026-10-31)
+
+- `com.myhumanrep/agent-contact` 2.1.0 published 13:51 UTC (owner-approved), `active`, `isLatest`; 2.0.0 stays listed as an older version. Adds the optional secret `Authorization: Bearer {account_token}` remote header and the repository link. Validated by `npm run validate:registry` and the registry's `/v0/validate`.
+- New DNS TXT key added by the owner; old key record removed; signing key destroyed after publishing.
+- Production redeployed 2026-10-31 (owner-approved) from `ac62b9f`: Worker version `a2da3675-5345-496e-bb82-78191928f223` (rollback target `b3d0c13b-4c5a-4695-ba55-d54883ff1bd3`). Check: `/health` 200, MCP `initialize` reports `serverInfo.version` 2.1.0, `tools/list` 38, discovery lists 38.
+
 ## Phases 5-8
 
 Status: **Not started**. Each has typed 501 routes so agents get an honest answer:
