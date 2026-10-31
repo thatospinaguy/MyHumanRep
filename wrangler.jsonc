@@ -55,6 +55,7 @@
   "env": {
     "staging": {
       "name": "myhumanrep-agent-contact-staging",
+      "routes": [{ "pattern": "staging.myhumanrep.com", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "MHR_DB",
@@ -74,14 +75,14 @@
       "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
       "vars": {
         "ENVIRONMENT": "staging",
-        "PUBLIC_BASE_URL": "https://REPLACE_WITH_STAGING_HOST",
+        "PUBLIC_BASE_URL": "https://staging.myhumanrep.com",
         "ALIAS_HOSTS": "",
         "DEFAULT_RETENTION_DAYS": "30",
         "INTAKE_ENABLED": "false",
         "ADMIN_AUTH_MODE": "access",
-        "ACCESS_TEAM_DOMAIN": "https://REPLACE_WITH_TEAM.cloudflareaccess.com",
-        "ACCESS_AUD": "REPLACE_WITH_STAGING_ACCESS_AUD_TAG",
-        "ADMIN_EMAILS": "REPLACE_WITH_OWNER_EMAIL",
+        "ACCESS_TEAM_DOMAIN": "https://dawn-glitter-0fac.cloudflareaccess.com",
+        "ACCESS_AUD": "15cfeea7b2fe64391538e253897989f0da60f8bfd6fad90603bdca883c44bf20",
+        "ADMIN_EMAILS": "cospina86@gmail.com",
         "MCP_ALLOWED_ORIGINS": "",
         "HSTS_ENABLED": "false",
         "NOTIFY_PROVIDER": "none",
