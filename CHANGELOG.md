@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: agent continuity (2026-10-31)
+## Agent continuity (production, 2026-10-31)
 
 ### Added
 - MCP: `Authorization: Bearer <account_token>` connection header. Threads started with it are linked to the account, `start_conversation` withholds the thread token, and tools run without credential arguments.
