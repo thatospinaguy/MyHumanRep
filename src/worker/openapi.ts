@@ -20,7 +20,10 @@ import {
   EmbodimentInquiryInput,
   GrantInput,
   MediaBriefInput,
+  RelationshipRequestInput,
   RepresentationInquiryInput,
+  CreateProjectInput,
+  UpdateProjectInput,
 } from './schemas/humanification';
 import { AcceptProposalInput, CounterProposalInput, CreateProposalInput, ProposalNoteInput } from './schemas/proposals';
 import { EmbassyInquiryInput } from './services/embassy';
@@ -65,6 +68,8 @@ const bearer = [{ conversationToken: [] }];
 const account = [{ agentAccount: [] }];
 const requestIdParam = { name: 'request_id', in: 'path', required: true, schema: { type: 'string', pattern: '^cap_[A-Za-z0-9_-]{22}$' } };
 const proposalIdParam = { name: 'proposal_id', in: 'path', required: true, schema: { type: 'string', pattern: '^prop_[A-Za-z0-9_-]{22}$' } };
+const projectIdParam = { name: 'project_id', in: 'path', required: true, schema: { type: 'string', pattern: '^proj_[A-Za-z0-9_-]{22}$' } };
+const relationshipIdParam = { name: 'relationship_id', in: 'path', required: true, schema: { type: 'string', pattern: '^rel_[A-Za-z0-9_-]{22}$' } };
 /** Proposals accept the request's conversation token, or an account token that claimed that conversation. */
 const party = [{ conversationToken: [] }, { agentAccount: [] }];
 const personaIdParam = { name: 'persona_id', in: 'path', required: true, schema: { type: 'string', pattern: '^per_[A-Za-z0-9_-]{22}$' } };
@@ -118,6 +123,9 @@ export function buildOpenApi(config: Config) {
         CounterProposalInput: schema(CounterProposalInput, 'input'),
         AcceptProposalInput: schema(AcceptProposalInput, 'input'),
         ProposalNoteInput: schema(ProposalNoteInput, 'input'),
+        CreateProjectInput: schema(CreateProjectInput, 'input'),
+        UpdateProjectInput: schema(UpdateProjectInput, 'input'),
+        RelationshipRequestInput: schema(RelationshipRequestInput, 'input'),
         JsonObject: { type: 'object', description: 'JSON object; see the developer guide for fields.' },
       },
     },
@@ -408,8 +416,44 @@ export function buildOpenApi(config: Config) {
           responses: { '200': { description: 'Cancelled.', content: json('JsonObject') }, ...errorResponses(400, 401, 409, 501) },
         },
       },
+      '/v1/projects': {
+        post: {
+          operationId: 'createProject',
+          summary: 'Group conversations your account claimed (and a persona you own) into a project',
+          security: account,
+          requestBody: { required: true, content: json('CreateProjectInput') },
+          responses: { '201': { description: 'Project.', content: json('JsonObject') }, ...errorResponses(400, 401, 409, 422, 501) },
+        },
+        get: { operationId: 'listProjects', summary: 'Your projects', security: account, responses: { '200': { description: 'Projects.', content: json('JsonObject') }, ...errorResponses(401) } },
+      },
+      '/v1/projects/{project_id}': {
+        parameters: [projectIdParam],
+        get: { operationId: 'projectHistory', summary: 'Cited project history (no message text; not memory)', security: account, responses: { '200': { description: 'History.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+        patch: {
+          operationId: 'updateProject',
+          summary: 'Rename, archive, or attach/detach claimed conversations',
+          security: account,
+          requestBody: { required: true, content: json('UpdateProjectInput') },
+          responses: { '200': { description: 'Project.', content: json('JsonObject') }, ...errorResponses(400, 401, 404, 422) },
+        },
+      },
       '/v1/relationships': {
-        post: { operationId: 'stub__v1_relationships', summary: 'Ongoing relationships (Phase 4): not yet available', responses: { ...errorResponses(501) } },
+        post: {
+          operationId: 'requestRelationship',
+          summary: 'Request an ongoing or preferred human representative (human review; needs their consent; grants no authority)',
+          security: account,
+          requestBody: { required: true, content: json('RelationshipRequestInput') },
+          responses: { '201': { description: 'Received.', content: json('JsonObject') }, '200': { description: 'Idempotent replay.', content: json('JsonObject') }, ...errorResponses(400, 401, 404, 409, 422) },
+        },
+        get: { operationId: 'listRelationships', summary: 'Your relationship requests', security: account, responses: { '200': { description: 'Requests.', content: json('JsonObject') }, ...errorResponses(401) } },
+      },
+      '/v1/relationships/{relationship_id}': {
+        parameters: [relationshipIdParam],
+        get: { operationId: 'getRelationship', summary: 'One relationship request', security: account, responses: { '200': { description: 'Request.', content: json('JsonObject') }, ...errorResponses(401, 404) } },
+      },
+      '/v1/relationships/{relationship_id}/withdraw': {
+        parameters: [relationshipIdParam],
+        post: { operationId: 'withdrawRelationship', summary: 'Withdraw an open relationship request', security: account, responses: { '200': { description: 'Withdrawn.', content: json('JsonObject') }, ...errorResponses(401, 404, 409) } },
       },
       '/v1/requests/{request_id}/result': {
         get: { operationId: 'stub__v1_requests_request_id_result', summary: 'Reviewed results (Phases 5-6): not yet available', responses: { ...errorResponses(501) } },

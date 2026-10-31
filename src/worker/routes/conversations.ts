@@ -145,8 +145,6 @@ export function registerConversationRoutes(app: Hono<AppEnv>, deps: AppDeps): vo
     return c.json(await withdrawProposal(ctx, party, c.req.param('id'), await optionalBody(c, ctx.config.limits.bodyMaxBytes)));
   });
   for (const suffix of ['counteroffers', 'accept', 'request-authorization', 'withdraw']) app.all(`/v1/proposals/:id/${suffix}`, methodNotAllowed('POST'));
-  app.all('/v1/projects/:id', later('Projects (Phase 4)', 'Use GET /v1/conversations/{id}/status.'));
-  app.all('/v1/relationships', later('Ongoing representative relationships (Phase 4)', 'Ask in your conversation or via a persona representation inquiry.'));
   app.all('/v1/requests/:id/status', later('Request-scoped status', 'Use GET /v1/conversations/{id}/status with your conversation token.'));
   app.all('/v1/requests/:id/result', later('Reviewed results and evidence (Phases 5-6)', 'No work is performed in this release.'));
   app.all('/v1/experiments/inquiries', later('Dedicated Human Lab intake (Phase 6)', 'Submit a capability request with category_hint "human-laboratory" (or MCP request_experiment_feasibility).'));

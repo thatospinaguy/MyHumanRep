@@ -15,6 +15,16 @@ import {
   revokeGrant,
   updatePersona,
 } from '../services/personas';
+import {
+  createProject,
+  getRelationship,
+  listProjects,
+  listRelationships,
+  projectHistory,
+  requestRelationship,
+  updateProject,
+  withdrawRelationship,
+} from '../services/projects';
 import { readJsonBody } from '../utils/body';
 
 /** Agent accounts and Humanification Studio (master spec 6, 11.7). Separate credential from threads. */
@@ -98,5 +108,40 @@ export function registerHumanificationRoutes(app: Hono<AppEnv>, deps: AppDeps): 
   app.get('/v1/personas/:id/inquiries', async (c) => {
     const { ctx, account: a } = await account(c);
     return c.json(await listPersonaInquiries(ctx, a, c.req.param('id')));
+  });
+
+  // Projects and relationship requests (spec 10, 11.8). Account token only.
+  app.post('/v1/projects', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await createProject(ctx, a, await body(c, ctx.config.limits.bodyMaxBytes)), 201);
+  });
+  app.get('/v1/projects', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await listProjects(ctx, a));
+  });
+  app.get('/v1/projects/:id', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await projectHistory(ctx, a, c.req.param('id')));
+  });
+  app.patch('/v1/projects/:id', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await updateProject(ctx, a, c.req.param('id'), await body(c, ctx.config.limits.bodyMaxBytes)));
+  });
+  app.post('/v1/relationships', async (c) => {
+    const { ctx, account: a } = await account(c);
+    const result = await requestRelationship(ctx, a, await body(c, ctx.config.limits.bodyMaxBytes));
+    return c.json(result.body, result.created ? 201 : 200);
+  });
+  app.get('/v1/relationships', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await listRelationships(ctx, a));
+  });
+  app.get('/v1/relationships/:id', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await getRelationship(ctx, a, c.req.param('id')));
+  });
+  app.post('/v1/relationships/:id/withdraw', async (c) => {
+    const { ctx, account: a } = await account(c);
+    return c.json(await withdrawRelationship(ctx, a, c.req.param('id')));
   });
 }

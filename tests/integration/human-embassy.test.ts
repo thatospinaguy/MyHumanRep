@@ -151,13 +151,12 @@ describe('credential rotation and conversation status', () => {
 });
 
 describe('later-phase modules are truthful', () => {
-  it('T-049 / T-056: results, relationships, Human Lab intake, representatives and payments return typed not_yet_available and create nothing', async () => {
+  it('T-049 / T-056: results, Human Lab intake, representatives and payments return typed not_yet_available and create nothing', async () => {
     const h = await makeHarness();
     const c = await startConversation(h);
     const before = (await env.MHR_DB.prepare('SELECT COUNT(*) AS n FROM notification_outbox').first<{ n: number }>())!.n;
     for (const [method, path] of [
       ['GET', '/v1/requests/cap_x/result'],
-      ['POST', '/v1/relationships'],
       ['POST', '/v1/experiments/inquiries'],
     ]) {
       const res = await h.fetch(path!, { method: method!, headers: c.auth, ...(method === 'POST' ? { json: { dispatch: true, pay: 100 } } : {}) });

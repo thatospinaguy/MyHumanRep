@@ -17,7 +17,17 @@ import {
   listMessages,
 } from '../services/conversations';
 import { ApiError, errorBody } from '../utils/http-errors';
-import { ClaimConversationInput, CreateAgentAccountInput, CreatePersonaInput, EmbodimentInquiryInput, MediaBriefInput, RepresentationInquiryInput } from '../schemas/humanification';
+import {
+  ClaimConversationInput,
+  CreateAgentAccountInput,
+  CreatePersonaInput,
+  CreateProjectInput,
+  EmbodimentInquiryInput,
+  MediaBriefInput,
+  RelationshipRequestInput,
+  RepresentationInquiryInput,
+} from '../schemas/humanification';
+import { createProject, projectHistory, requestRelationship } from '../services/projects';
 import { authenticateAccount, claimConversation, createAgentAccount } from '../services/agent-accounts';
 import { conversationStatus, createEmbassyInquiry, EmbassyInquiryInput } from '../services/embassy';
 import { createPersona, createPersonaInquiry, personaHistory, updatePersona } from '../services/personas';
@@ -559,6 +569,47 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
     },
     (args) =>
       run(ctx, async () => listRequestProposals(ctx, await authenticateRequestParty(ctx, args.request_id, credentialOf(args)))),
+  );
+
+  // ---------- Projects and relationships (spec 10, 12.3). Account token. ----------
+  server.registerTool(
+    'create_project',
+    {
+      title: 'Create a project',
+      description: 'Groups conversations your account claimed (and optionally a persona you own) so you can read one cited history later.',
+      inputSchema: CreateProjectInput.extend(accountShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return createProject(ctx, await authenticateAccount(ctx, token), rest);
+      }),
+  );
+  server.registerTool(
+    'get_project_history',
+    {
+      title: 'Read project history',
+      description: 'A cited timeline of the project: message, request, proposal and inquiry references. Not memory, and not proof that anything persisted.',
+      inputSchema: z.object({ ...accountShape, project_id: z.string().max(64) }).strict(),
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    (args) => run(ctx, async () => projectHistory(ctx, await authenticateAccount(ctx, args.account_token), args.project_id)),
+  );
+  server.registerTool(
+    'request_preferred_representative',
+    {
+      title: 'Request an ongoing or preferred representative',
+      description:
+        'Asks for a continuing human representative, spokesperson or relationship manager, optionally someone you worked with before. Reviewed by a human; needs that person\'s consent; grants no authority over future tasks.',
+      inputSchema: RelationshipRequestInput.extend(accountShape).strict(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    (args) =>
+      run(ctx, async () => {
+        const { token, rest } = withAccount(args);
+        return (await requestRelationship(ctx, await authenticateAccount(ctx, token), rest)).body;
+      }),
   );
 
   return server;

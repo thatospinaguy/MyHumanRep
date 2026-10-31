@@ -37,6 +37,8 @@ import {
   listPersonaInquiriesAdmin,
   listPersonasAdmin,
   patchPersonaInquiry,
+  listRelationshipsAdmin,
+  patchRelationshipAdmin,
 } from '../services/admin-humanification';
 import { decideCandidate, listCandidates, listRegistryAdmin, patchCapability } from '../services/admin-registry';
 import { FeatureFlagsPatch, flagsUpsertStatement, getFeatureFlags, moduleReadiness, type FeatureFlags } from '../services/feature-flags';
@@ -219,6 +221,8 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.all('/admin/api/representatives/:id', () => {
     throw errors.notYetAvailable('Human representative network (Phase 5)');
   });
+  app.get('/admin/api/relationships', async (c) => c.json(await listRelationshipsAdmin(adminCtx(c), c.req.query('status'))));
+  app.patch('/admin/api/relationships/:id', async (c) => c.json({ relationship: await patchRelationshipAdmin(adminCtx(c), c.req.param('id'), await body(c)) }));
   app.get('/admin/api/proposals', async (c) => c.json(await listProposalsAdmin(adminCtx(c), c.req.query('status'))));
   app.get('/admin/api/proposals/:id', async (c) => c.json(await getProposalAdmin(adminCtx(c), c.req.param('id'))));
   app.post('/admin/api/proposals/:id/counteroffers', async (c) => c.json(await counterProposalAdmin(adminCtx(c), c.req.param('id'), await body(c)), 201));

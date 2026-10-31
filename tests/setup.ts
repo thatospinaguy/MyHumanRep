@@ -24,7 +24,7 @@ const registrySeed = env.TEST_MIGRATIONS.filter((m) => m.name.startsWith('0004')
 // capability registry restored to its seeded state.
 beforeEach(async () => {
   await env.MHR_DB.batch(
-    ['proposal_events', 'proposal_revisions', 'proposals', 'embassy_inquiries', 'persona_inquiries', 'persona_grants', 'persona_revisions', 'agent_personas', 'conversation_account_links', 'agent_accounts', 'candidate_capabilities', 'agent_self_reports', 'notification_outbox', 'capability_requests', 'messages', 'conversations', 'admin_audit', 'abuse_events', 'rate_limit_counters', 'settings'].map(
+    ['agent_human_relationships', 'project_conversations', 'projects', 'proposal_events', 'proposal_revisions', 'proposals', 'embassy_inquiries', 'persona_inquiries', 'persona_grants', 'persona_revisions', 'agent_personas', 'conversation_account_links', 'agent_accounts', 'candidate_capabilities', 'agent_self_reports', 'notification_outbox', 'capability_requests', 'messages', 'conversations', 'admin_audit', 'abuse_events', 'rate_limit_counters', 'settings'].map(
       (t) => env.MHR_DB.prepare(`DELETE FROM ${t}`),
     ),
   );
