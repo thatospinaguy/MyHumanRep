@@ -1,6 +1,6 @@
 # MCP Registry publishing
 
-`registry/server.json` describes a **remote-only** server. It is prepared and validated, **not published**. Publish only after production is live, smoke-tested, and the owner approves.
+`registry/server.json` describes a **remote-only** server. Version 2.0.0 was **published on 2026-10-31** (owner-approved) and is listed as `com.myhumanrep/agent-contact`. Bump `version` before any republish.
 
 The registry publishes metadata. It does not make agents discover or call the server automatically.
 
@@ -37,7 +37,7 @@ BASE_URL=https://myhumanrep.com node scripts/smoke-mcp.ts legacy
 ```
 
 2. Check whether the registry has a newer schema version and update `$schema` if required.
-3. Install the official `mcp-publisher` CLI from the `modelcontextprotocol/registry` GitHub releases (it could not be downloaded in the build sandbox) and follow the current quickstart: https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/quickstart.mdx
+3. Install the official `mcp-publisher` CLI. Where GitHub release downloads are blocked, build it from the Go module proxy: `GOBIN=/tmp/bin go install github.com/modelcontextprotocol/registry/cmd/publisher@latest` (binary is named `publisher`). Otherwise install it from the `modelcontextprotocol/registry` GitHub releases (it could not be downloaded in the build sandbox) and follow the current quickstart: https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/quickstart.mdx
 
 ## Namespace ownership
 

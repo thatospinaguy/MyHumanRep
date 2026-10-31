@@ -2,7 +2,7 @@
 
 Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 19 phases and section 20 acceptance tests. Format per spec 21.2.
 
-Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging and production are deployed (2026-10-31). Production public intake is closed.
+Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging and production are deployed (2026-10-31). Production public intake is open; HSTS is on; the server is listed in the MCP Registry.
 
 Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 
@@ -24,7 +24,7 @@ Last full run: 2026-10-31 on branch `claude/upbeat-mayer-9ipp4n`.
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
 | 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
 | Staging deployment | Staging deployed (owner-approved, 2026-10-31) | `22d576c` (config on `ddc580c`) | intake opened by owner in `/admin/settings` |
-| Production deployment | Production deployed (owner-approved, 2026-10-31); intake closed | `70f4f10` (config on `804301e`) | `INTAKE_ENABLED=false` |
+| Production deployment | Production deployed (owner-approved, 2026-10-31); intake open | `c0518c3` | `INTAKE_ENABLED=true`, `HSTS_ENABLED=true` |
 
 Locked flags cannot be enabled through the admin API (`400`) until their module has code. Disabled modules return `501 not_yet_available`; nothing returns fake success.
 
@@ -122,7 +122,10 @@ DEPLOYMENT_CHECKLIST steps 1-5 and 8 for production; each Cloudflare change appr
 - Crons `*/5 * * * *` and `0 4 * * *` scheduled.
 - Verified on the real host: `GET /`, `/for-agents`, `/v1/capabilities`, `/openapi.json`, `/health` all 200; `intake_open=false`; `/admin/` and `/admin/api/conversations` redirect to the Access login when signed out.
 - `smoke-mcp.ts modern|legacy`: connect and `get_service_info` pass; `start_conversation` returns `503 intake_paused` (expected while intake is closed); `tools/list` stale count (script bug). `verify-openapi.ts`: same 3 placeholder false failures as staging.
-- Not done: opening public intake (owner decision), HSTS (step 9), MCP Registry publish (step 10), email alerts (step 6).
+- Public intake opened by the owner (`INTAKE_ENABLED=true`; the `/admin/settings` toggle overrides). `smoke-mcp.ts modern|legacy` then passed every flow check on production (start, read, send, capability request, wrong token rejected, close); `tools/list` stale count only.
+- HSTS (step 9): `max-age=31536000; includeSubDomains` on `myhumanrep.com` and `www`. Not submitted for preload.
+- MCP Registry (step 10): `com.myhumanrep/agent-contact` 2.0.0 published 2026-10-31, status `active`, remote `https://myhumanrep.com/mcp`. Namespace proven by a DNS TXT record (`v=MCPv1; k=ed25519; ...`); the signing key was destroyed after publishing, so the next publish needs a new key and TXT value.
+- Not done: email alerts (step 6). The zone's MX points at `emailfwd.myhumanrep.com`, which has no record (NXDOMAIN), so inbound mail to the domain is not delivered; recommended fix is Cloudflare Email Routing, which also enables `NOTIFY_PROVIDER=cloudflare_email`.
 
 ## Phases 5-8
 
@@ -155,9 +158,7 @@ Status: **Not started**. Each has typed 501 routes so agents get an honest answe
 
 None of these have been done. Each needs the owner's explicit approval:
 
-- Opening public intake on production.
-- HSTS enablement and preload; `myhumanrep.ca` aliases (zone not in the Cloudflare account).
+- HSTS preload; `myhumanrep.ca` aliases (zone not in the Cloudflare account).
 - Real email provider enablement.
-- MCP registry publish.
 - Any payment processor, live charge, worker recruitment or dispatch.
 - Legal review of the draft consent templates before they are used with real performers.
