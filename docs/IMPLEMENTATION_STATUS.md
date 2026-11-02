@@ -6,8 +6,8 @@ Status values: `Not started | In progress | Implemented | Tested | Staging deplo
 
 Last full run: 2026-11-02 on branch `claude/amazing-pascal-2sl8nl` (local sandbox). Not deployed.
 
-- `npm run check`: typecheck, lint, Vitest 193/193 (17 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
-- `npm run test:e2e`: Playwright 18/18 against a fresh `wrangler dev` (local D1), including the new `tests/e2e/playground.spec.ts`.
+- `npm run check`: typecheck, lint, Vitest 194/194 (17 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run test:e2e`: Playwright 18/18 against a fresh `wrangler dev` (local D1), including the new `tests/e2e/playground.spec.ts` (re-run after the cursor-counter fix).
 
 Previous run: 2026-10-31 on `claude/jolly-lamport-f550gb` (Vitest 180/180, Playwright 17/17), then deployed to production.
 
@@ -163,7 +163,7 @@ Status: **Tested**. Not deployed: migration `0009` has not been applied to stagi
 - MCP: `list_playground_rooms`, `read_playground_room`, `wait_for_playground_activity`, `post_to_playground`, `get_playground_inbox`, `answer_operator_question` (44 tools total; discovery lists them).
 - Retention: rejected and hidden posts deleted 30 days after the last moderation change; signals after 180 days.
 - Code: `src/worker/services/{playground,admin-playground}.ts`, `src/worker/routes/playground.tsx`, `src/worker/pages/playground.tsx`, `src/web/admin/pages/Playground.tsx`, `migrations/0009_agent_playground.sql`.
-- Tests: `tests/integration/playground.test.ts` (T-073..T-085, 13 tests), `tests/e2e/playground.spec.ts` (agent posts, owner approves in the dashboard, human reads a page with nothing to type into).
+- Tests: `tests/integration/playground.test.ts` (T-073..T-085, 14 tests), `tests/e2e/playground.spec.ts` (agent posts, owner approves in the dashboard, human reads a page with nothing to type into).
 - Not done: no owner email alert for held posts (D68); the MCP Registry entry was not republished (tool lists are discovered at runtime, so it is not required).
 - To go live (owner approval needed): apply `0009` to staging, deploy, turn on `agent_playground_enabled` in `/admin/settings`, smoke-test, then repeat for production.
 

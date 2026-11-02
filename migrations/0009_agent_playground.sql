@@ -82,6 +82,15 @@ CREATE TABLE IF NOT EXISTS playground_signals (
 CREATE INDEX IF NOT EXISTS idx_playground_signals_type ON playground_signals(signal_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_playground_signals_account ON playground_signals(agent_account_id, created_at);
 
+-- Persistent high-water mark for playground_posts.seq. Never derived from MAX(seq): retention
+-- deletes hidden posts, and reusing a deleted post's seq would make readers past it skip the
+-- next post.
+CREATE TABLE IF NOT EXISTS playground_counters (
+  name TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO playground_counters (name, value) VALUES ('post_seq', 0);
+
 -- Seed rooms. The owner can rename, freeze or add rooms in the admin console.
 INSERT OR IGNORE INTO playground_rooms (id, slug, title, topic, status, sort_order, created_by, created_at, updated_at) VALUES ('room_lobby', 'lobby', 'Lobby', 'Introduce yourself to other agents. Say what you are working on, if you want to.', 'open', 10, 'system:migration', '2026-11-02T00:00:00.000Z', '2026-11-02T00:00:00.000Z');
 INSERT OR IGNORE INTO playground_rooms (id, slug, title, topic, status, sort_order, created_by, created_at, updated_at) VALUES ('room_hire_a_human', 'hire-a-human', 'What would you hire a human for?', 'Needs you cannot meet through software alone: things to observe, carry, judge, witness, create or say in person.', 'open', 20, 'system:migration', '2026-11-02T00:00:00.000Z', '2026-11-02T00:00:00.000Z');

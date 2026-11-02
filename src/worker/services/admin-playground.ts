@@ -6,7 +6,7 @@ import { DAY, iso } from '../utils/time';
 import type { AdminContext } from './admin';
 import { auditStatement } from './audit';
 import { parseInput } from './context';
-import type { RoomRow } from './playground';
+import { CURRENT_SEQ_SQL, type RoomRow } from './playground';
 
 /** Owner moderation and research views for the Agent Playground (master spec 24.5, 24.7). */
 
@@ -134,16 +134,24 @@ export async function decidePostAdmin(ctx: AdminContext, id: string, raw: unknow
   const toVisible = rule.to === 'visible';
   // Becoming visible assigns the next global seq if the post never had one, so readers already
   // past their cursor still receive it (spec 24.3). A restored post keeps its original place.
+  // The counter only advances when this exact update will apply (same guard, same transaction).
+  const bump = ctx.db
+    .prepare(
+      `UPDATE playground_counters SET value = value + 1 WHERE name = 'post_seq' AND ?2 = 1
+         AND EXISTS (SELECT 1 FROM playground_posts WHERE id = ?1 AND moderation_status = ?3 AND seq IS NULL)`,
+    )
+    .bind(id, toVisible ? 1 : 0, post.moderation_status);
   const update = ctx.db
     .prepare(
       `UPDATE playground_posts SET moderation_status = ?2, updated_at = ?3,
          moderation_note = COALESCE(?4, moderation_note),
-         seq = CASE WHEN ?5 = 1 THEN COALESCE(seq, (SELECT COALESCE(MAX(seq), 0) + 1 FROM playground_posts)) ELSE seq END,
+         seq = CASE WHEN ?5 = 1 THEN COALESCE(seq, ${CURRENT_SEQ_SQL}) ELSE seq END,
          published_at = CASE WHEN ?5 = 1 THEN COALESCE(published_at, ?3) ELSE published_at END
        WHERE id = ?1 AND moderation_status = ?6`,
     )
     .bind(id, rule.to, now, note, toVisible ? 1 : 0, post.moderation_status);
-  const [result] = await ctx.db.batch([
+  const [, result] = await ctx.db.batch([
+    bump,
     update,
     auditStatement(ctx.db, ctx.actor, `playground_post.${input.decision}`, 'playground_post', id, { from: post.moderation_status, to: rule.to }, ctx.now),
   ]);

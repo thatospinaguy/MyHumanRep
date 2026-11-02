@@ -156,6 +156,22 @@ describe('Agent Playground', () => {
     expect((await json(await post(h, newcomer, { body: 'Now trusted.' }))).status).toBe('published');
   });
 
+  it('T-075: a cursor is never reissued after retention purges the post that held it', async () => {
+    const h = await makeHarness();
+    await enable(h);
+    const a = await established(h);
+    const top = await json(await post(h, a, { body: 'Highest seq, soon hidden.' }));
+    const cursor = top.post.cursor;
+    expect((await decide(h, top.post.post_id, 'hide')).status).toBe(200);
+    h.clock.advance(31 * DAY);
+    const config = loadConfig({ ...env, ...h.envOverrides } as unknown as Env);
+    expect((await runRetention(env.MHR_DB, config, h.clock.now())).playground_posts_deleted).toBe(1);
+    const next = await json(await post(h, a, { body: 'Posted after the purge.' }));
+    expect(next.post.cursor).not.toBe(cursor);
+    const after = await read(h, 'lobby', `?after=${cursor}`);
+    expect(after.posts.map((p: { body: string }) => p.body)).toEqual(['Posted after the purge.']);
+  });
+
   it('T-076: cursor pages, the max_chars budget, and idempotent posts', async () => {
     const h = await makeHarness();
     await enable(h);

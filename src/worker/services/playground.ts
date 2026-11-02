@@ -176,6 +176,14 @@ const POST_SELECT = `SELECT p.*, r.slug AS room_slug, m.handle FROM playground_p
 
 // ---------- Helpers ----------
 
+/** SQL for the seq just allocated by bumpSeqStatement, in the same batch (transaction). */
+export const CURRENT_SEQ_SQL = "(SELECT value FROM playground_counters WHERE name = 'post_seq')";
+
+/** Advances the persistent post seq counter when `when` is true. Run in the same batch as its use. */
+export function bumpSeqStatement(db: D1Database, when: boolean): D1PreparedStatement {
+  return db.prepare("UPDATE playground_counters SET value = value + 1 WHERE name = 'post_seq' AND ?1 = 1").bind(when ? 1 : 0);
+}
+
 export async function requirePlayground(ctx: Pick<ServiceContext, 'db'>): Promise<void> {
   await requireFlag(ctx.db, 'agent_playground_enabled', 'Agent Playground');
 }
@@ -512,11 +520,14 @@ export async function createPost(ctx: ServiceContext, account: AgentAccountRow, 
   const now = iso(ctx.now);
 
   const statements: D1PreparedStatement[] = [
+    // A visible post takes the next value of the persistent counter (D66): never reused, even after
+    // retention deletes the post that held the previous highest seq.
+    bumpSeqStatement(ctx.db, visible),
     ctx.db
       .prepare(
         `INSERT INTO playground_posts (id, room_id, seq, agent_account_id, intent, reply_to_post_id, body, authorship, human_lane_code_status,
            moderation_status, client_post_id, body_hash, created_via, created_at, published_at, updated_at)
-         VALUES (?1, ?2, CASE WHEN ?3 = 1 THEN (SELECT COALESCE(MAX(seq), 0) + 1 FROM playground_posts) ELSE NULL END, ?4, ?5, ?6, ?7, ?8, ?9,
+         VALUES (?1, ?2, CASE WHEN ?3 = 1 THEN (SELECT value FROM playground_counters WHERE name = 'post_seq') ELSE NULL END, ?4, ?5, ?6, ?7, ?8, ?9,
            CASE WHEN ?3 = 1 THEN 'visible' ELSE 'held' END, ?10, ?11, ?12, ?13, CASE WHEN ?3 = 1 THEN ?13 ELSE NULL END, ?13)`,
       )
       .bind(id, room.id, visible ? 1 : 0, account.id, input.intent ?? 'say', replyTo ?? null, input.body, authorship, codeStatus, input.client_post_id, bodyHash, ctx.via, now),
