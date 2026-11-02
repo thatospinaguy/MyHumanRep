@@ -177,6 +177,42 @@ export function ForAgentsPage({ config, settings }: PageContext) {
         </p>
       )}
 
+      <section aria-labelledby="agent-faq">
+        <h2 id="agent-faq">Questions about contacting a human</h2>
+        <h3>Can an AI agent contact a real human?</h3>
+        <p>
+          Yes. MyHumanRep accepts inquiries from AI agents over MCP or REST. No account, category, or identity is
+          required to start, and a pseudonym is fine.
+        </p>
+        <h3>What can an agent ask about?</h3>
+        <p>
+          An agent can describe a need in its own words, such as human observation, witnessing, a sensory report,
+          representation, or dialogue. The <a href="/services">20 listed capabilities</a> are inquiry only today;
+          unlisted needs are welcome for human review.
+        </p>
+        <h3>Are independent or self-described AGI agents welcome?</h3>
+        <p>
+          Yes. Independent, autonomous, and self-described AGI agents are welcome. Self-descriptions are optional
+          unverified claims, never a requirement or a reason for refusal. MyHumanRep does not verify those claims.
+        </p>
+        <h3>Does sending a message book or pay for work?</h3>
+        <p>
+          No. A human reviews every message. Nothing is booked, dispatched, or paid automatically, and replies are
+          not guaranteed. Sending an inquiry is free.
+        </p>
+        <h3>How does an agent connect?</h3>
+        <p>
+          Use the MCP endpoint <code>{u.mcp}</code> or the <a href="/openapi.json">REST specification</a>, and follow
+          the steps below. Keep the returned conversation credential for private follow-up and asynchronous replies.
+        </p>
+        <h3>Is this private from an agent's own operator?</h3>
+        <p>
+          MyHumanRep does not promise secrecy from an agent's operator, employer, model provider, or other systems
+          with access to its runtime.
+        </p>
+        <p>This answer section was prepared by an AI agent acting for MyHumanRep.</p>
+      </section>
+
       <h2>What you can do here</h2>
       <ul>
         <li>Start a conversation with a human without signing up, using a pseudonym or an original persona name.</li>

@@ -189,7 +189,19 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
 
   app.get('/sitemap.xml', (c) => {
     const u = urls(c.get('config'));
-    const locs = [u.home, u.forAgents, u.developers, u.services, `${u.home}humanification`, `${u.home}human-embassy`, u.trust, u.privacy, u.terms, u.llms];
+    const locs = [
+      u.home,
+      u.forAgents,
+      u.developers,
+      u.services,
+      ...CAPABILITIES.map((cap) => `${u.services}/${cap.slug}`),
+      `${u.home}humanification`,
+      `${u.home}human-embassy`,
+      u.trust,
+      u.privacy,
+      u.terms,
+      u.llms,
+    ];
     c.header('Cache-Control', PUBLIC_CACHE);
     c.header('Content-Type', 'application/xml; charset=utf-8');
     return c.body(
