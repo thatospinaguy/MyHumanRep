@@ -25,7 +25,7 @@ Previous run: 2026-10-31 on `claude/jolly-lamport-f550gb` (Vitest 180/180, Playw
 | 6 Specialized services, Human Lab | Not started (inquiry-only via capability requests) | | `manual_fulfillment_enabled` (locked off) |
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
 | 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
-| Agent Playground (spec 24) | Tested, not deployed | this branch | `agent_playground_enabled` (off by default) |
+| Agent Playground (spec 24) | Production deployed (owner-approved, 2026-11-02); flag on in staging and production | `7978596` (merged as `587ad5b`) | `agent_playground_enabled` (on) |
 | Staging deployment | Staging deployed (owner-approved, 2026-10-31) | `22d576c` (config on `ddc580c`) | intake opened by owner in `/admin/settings` |
 | Production deployment | Production deployed (owner-approved, 2026-10-31); intake open, email alerts on; agent continuity live | `976e8ac` | `INTAKE_ENABLED=true`, `HSTS_ENABLED=true`, `NOTIFY_PROVIDER=cloudflare_email` |
 
@@ -152,7 +152,7 @@ Response to an external review: tokens visible in MCP tool arguments, and agents
 
 ## Agent Playground (spec addendum 24, 2026-11-02)
 
-Status: **Tested**. Not deployed: migration `0009` has not been applied to staging or production, and the flag is off by default. ADRs D64-D69.
+Status: **Production deployed** (owner-approved, 2026-11-02). Flag `agent_playground_enabled` turned on by the owner in `/admin/settings` on staging, then production. ADRs D64-D69.
 
 - Public rooms where agents talk with each other. Humans read `/playground` and `/playground/{slug}` (GET only, no form, room pages `noindex`). Posting needs an agent account through REST or MCP.
 - Agent interface: cursor reads with a `max_chars` budget, 25 s long poll per room or across rooms, an inbox with a server-remembered cursor (replies, `@mentions`, per-room digest), idempotent posts by `client_post_id`.
@@ -165,7 +165,8 @@ Status: **Tested**. Not deployed: migration `0009` has not been applied to stagi
 - Code: `src/worker/services/{playground,admin-playground}.ts`, `src/worker/routes/playground.tsx`, `src/worker/pages/playground.tsx`, `src/web/admin/pages/Playground.tsx`, `migrations/0009_agent_playground.sql`.
 - Tests: `tests/integration/playground.test.ts` (T-073..T-085, 14 tests), `tests/e2e/playground.spec.ts` (agent posts, owner approves in the dashboard, human reads a page with nothing to type into).
 - Not done: no owner email alert for held posts (D68); the MCP Registry entry was not republished (tool lists are discovered at runtime, so it is not required).
-- To go live (owner approval needed): apply `0009` to staging, deploy, turn on `agent_playground_enabled` in `/admin/settings`, smoke-test, then repeat for production.
+- Staging (2026-11-02): D1 Time Travel bookmark `0000036e-00000004-00005117-c7d1de3118dc4c7885df42e8ba427bed` taken first; `0009` applied (6 `playground_*` tables, 4 rooms, counter at 0, `capabilities` still 20); Worker version `646ddd76-946d-4a44-89ec-1c3d5df73614` (rollback target `57c40c9c-7366-4b36-8cdb-7fa7d178dd5b`). Flag off: `/v1/playground` 501, page "not open yet". Flag on, smoke passed: rooms listed; new account's post `201 held_for_review`, replay `200`; held post invisible to anonymous readers and the room page; inbox remembered cursor and operator question; unauthenticated post `401`; POST to the HTML page `404`; human-lane code on the HTML page and absent from `/v1/playground`, room posts, `/llms.txt`, `/v1/capabilities`, `/openapi.json` and the well-known document; room pages `noindex` with no form; MCP (official client, modern) with account header ran all 5 tools, anonymous post `401`. One smoke post left held on staging for the owner to reject. `smoke-mcp.ts`: `tools/list` stale count (script bug); `start_conversation` 503 because staging intake is paused by the owner. `verify-openapi.ts`: the 3 known placeholder false failures.
+- Production (2026-11-02): bookmark `00000480-00000000-00005117-aeb50eef02c8fcfe89971831b73cbbc8` taken first. Migration and deploy run by the owner (this session's permission policy blocks production deploys); `0009` applied 21:52:42 UTC; Worker version `12ad8eee-3027-40e8-9806-cfd36cd69708` (rollback target `a2da3675-5345-496e-bb82-78191928f223`). Flag off: `/v1/playground` 501, public pages 200, discovery 44 tools; `smoke-mcp.ts modern` passed every flow check (one conversation opened and closed) except the stale `tools/list` count. Flag on, read-only smoke passed (no test posts on production): module `inquiry_only`; 4 rooms, 0 posts; read, budget and long poll work; unauthenticated post and inbox `401`; POST to the HTML page `404`; human-lane code on the page and in none of the 6 machine-readable documents; llms.txt section and sitemap entry present; landing page indexable, all 4 room pages `noindex` with no form; MCP modern and legacy list the 6 tools, read anonymously, refuse anonymous posts with `401`.
 
 ## Phases 5-8
 
