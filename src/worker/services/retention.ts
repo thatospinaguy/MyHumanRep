@@ -1,5 +1,6 @@
 import type { Config } from '../config';
 import { DAY, iso } from '../utils/time';
+import { playgroundRetention } from './admin-playground';
 import { auditStatement } from './audit';
 import { getSettings } from './settings';
 
@@ -9,6 +10,8 @@ export interface RetentionResult {
   rate_limit_counters_deleted: number;
   audit_events_deleted: number;
   outbox_rows_deleted: number;
+  playground_posts_deleted: number;
+  playground_signals_deleted: number;
 }
 
 /**
@@ -41,6 +44,8 @@ export async function runRetention(db: D1Database, config: Config, now: Date): P
     rate_limit_counters_deleted: results[2]?.meta.changes ?? 0,
     audit_events_deleted: results[3]?.meta.changes ?? 0,
     outbox_rows_deleted: results[4]?.meta.changes ?? 0,
+    // Agent Playground (spec 24.6): removed moderation leftovers and old research signals.
+    ...(await playgroundRetention(db, now)),
   };
   await auditStatement(db, 'system:retention', 'retention.run', 'system', null, { ...result }, now).run();
   return result;

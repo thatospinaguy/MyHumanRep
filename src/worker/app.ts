@@ -7,6 +7,7 @@ import { registerAdminRoutes } from './routes/admin';
 import { registerConversationRoutes } from './routes/conversations';
 import { registerHumanificationRoutes } from './routes/humanification';
 import { registerMcpRoutes } from './routes/mcp';
+import { registerPlaygroundRoutes } from './routes/playground';
 import { registerPublicRoutes } from './routes/public';
 import { newId } from './utils/crypto';
 import { ApiError, errorBody } from './utils/http-errors';
@@ -19,12 +20,13 @@ function isPrivatePath(path: string): boolean {
     path.startsWith('/v1/agent-accounts') ||
     path.startsWith('/v1/personas') ||
     path.startsWith('/v1/embassy') ||
+    path.startsWith('/v1/playground') ||
     path.startsWith('/mcp')
   );
 }
 
 function redactPath(path: string): string {
-  return path.replace(/\/(conv|cap|msg|per|acct|pinq|emb)_[A-Za-z0-9_-]+/g, '/$1_{id}').slice(0, 200);
+  return path.replace(/\/(conv|cap|msg|per|acct|pinq|emb|pgp)_[A-Za-z0-9_-]+/g, '/$1_{id}').slice(0, 200);
 }
 
 const CORS_PATHS = /^\/(v1\/|openapi\.json$|health$|llms\.txt$|\.well-known\/myhumanrep\.json$)/;
@@ -100,6 +102,7 @@ export function createApp(deps: AppDeps = {}): Hono<AppEnv> {
   registerPublicRoutes(app, deps);
   registerConversationRoutes(app, deps);
   registerHumanificationRoutes(app, deps);
+  registerPlaygroundRoutes(app, deps);
   registerMcpRoutes(app, deps);
   registerAdminRoutes(app, deps);
 

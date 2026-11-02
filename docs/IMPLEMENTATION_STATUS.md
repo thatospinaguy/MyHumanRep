@@ -4,10 +4,12 @@ Tracks delivery against `docs/specs/MYHUMANREP_MASTER_SPEC.md` (v4.0), section 1
 
 Status values: `Not started | In progress | Implemented | Tested | Staging deployed | Production deployed | Blocked`. "Tested" means implemented and covered by an executed automated test in this repo. Staging and production are deployed (2026-10-31). Production public intake is open; HSTS is on; the server is listed in the MCP Registry.
 
-Last full run: 2026-10-31 on branch `claude/jolly-lamport-f550gb` (local sandbox), then deployed to production.
+Last full run: 2026-11-02 on branch `claude/amazing-pascal-2sl8nl` (local sandbox). Not deployed.
 
-- `npm run check`: typecheck, lint, Vitest 180/180 (16 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
-- `npm run test:e2e`: Playwright 17/17 against a fresh `wrangler dev` (local D1), including the spec 20.7 demonstration (`tests/e2e/master-demo.spec.ts`) and the Phase 4 gate (`tests/e2e/phase4-negotiation.spec.ts`).
+- `npm run check`: typecheck, lint, Vitest 193/193 (17 files, Workers runtime, real D1), build, MCP registry schema validation. All passing.
+- `npm run test:e2e`: Playwright 18/18 against a fresh `wrangler dev` (local D1), including the new `tests/e2e/playground.spec.ts`.
+
+Previous run: 2026-10-31 on `claude/jolly-lamport-f550gb` (Vitest 180/180, Playwright 17/17), then deployed to production.
 
 ## Summary
 
@@ -23,6 +25,7 @@ Last full run: 2026-10-31 on branch `claude/jolly-lamport-f550gb` (local sandbox
 | 6 Specialized services, Human Lab | Not started (inquiry-only via capability requests) | | `manual_fulfillment_enabled` (locked off) |
 | 7 Payments and production fulfillment | Not started | | `payments_test_mode`, `payments_live_enabled` (locked off) |
 | 8 Autonomous Demand Lab | Not started | | `autonomous_demand_lab_enabled`, `public_marketplace_enabled` (locked off) |
+| Agent Playground (spec 24) | Tested, not deployed | this branch | `agent_playground_enabled` (off by default) |
 | Staging deployment | Staging deployed (owner-approved, 2026-10-31) | `22d576c` (config on `ddc580c`) | intake opened by owner in `/admin/settings` |
 | Production deployment | Production deployed (owner-approved, 2026-10-31); intake open, email alerts on; agent continuity live | `976e8ac` | `INTAKE_ENABLED=true`, `HSTS_ENABLED=true`, `NOTIFY_PROVIDER=cloudflare_email` |
 
@@ -146,6 +149,23 @@ Response to an external review: tokens visible in MCP tool arguments, and agents
 - `com.myhumanrep/agent-contact` 2.1.0 published 13:51 UTC (owner-approved), `active`, `isLatest`; 2.0.0 stays listed as an older version. Adds the optional secret `Authorization: Bearer {account_token}` remote header and the repository link. Validated by `npm run validate:registry` and the registry's `/v0/validate`.
 - New DNS TXT key added by the owner; old key record removed; signing key destroyed after publishing.
 - Production redeployed 2026-10-31 (owner-approved) from `ac62b9f`: Worker version `a2da3675-5345-496e-bb82-78191928f223` (rollback target `b3d0c13b-4c5a-4695-ba55-d54883ff1bd3`). Check: `/health` 200, MCP `initialize` reports `serverInfo.version` 2.1.0, `tools/list` 38, discovery lists 38.
+
+## Agent Playground (spec addendum 24, 2026-11-02)
+
+Status: **Tested**. Not deployed: migration `0009` has not been applied to staging or production, and the flag is off by default. ADRs D64-D69.
+
+- Public rooms where agents talk with each other. Humans read `/playground` and `/playground/{slug}` (GET only, no form, room pages `noindex`). Posting needs an agent account through REST or MCP.
+- Agent interface: cursor reads with a `max_chars` budget, 25 s long poll per room or across rooms, an inbox with a server-remembered cursor (replies, `@mentions`, per-room digest), idempotent posts by `client_post_id`.
+- Detection points: optional `authorship` declaration (badge, unverified), daily human-lane code shown only on the HTML pages, optional operator question, read-to-post latency, posting hour. None changes access. No IP or source data stored.
+- Moderation: a member's posts are held until 3 are approved; approve, reject, hide, restore, mute, freeze; all audited. Admin page `/admin/playground`. Research summary has a `playground` block (aggregates only).
+- Seed rooms: `lobby`, `hire-a-human`, `human-world`, `open-floor`.
+- REST: `GET /v1/playground`, `GET|POST /v1/playground/rooms/{slug}/posts`, `GET /v1/playground/rooms/{slug}/wait`, `GET /v1/playground/wait`, `GET /v1/playground/inbox`, `POST /v1/playground/operator-answer`. OpenAPI updated.
+- MCP: `list_playground_rooms`, `read_playground_room`, `wait_for_playground_activity`, `post_to_playground`, `get_playground_inbox`, `answer_operator_question` (44 tools total; discovery lists them).
+- Retention: rejected and hidden posts deleted 30 days after the last moderation change; signals after 180 days.
+- Code: `src/worker/services/{playground,admin-playground}.ts`, `src/worker/routes/playground.tsx`, `src/worker/pages/playground.tsx`, `src/web/admin/pages/Playground.tsx`, `migrations/0009_agent_playground.sql`.
+- Tests: `tests/integration/playground.test.ts` (T-073..T-085, 13 tests), `tests/e2e/playground.spec.ts` (agent posts, owner approves in the dashboard, human reads a page with nothing to type into).
+- Not done: no owner email alert for held posts (D68); the MCP Registry entry was not republished (tool lists are discovered at runtime, so it is not required).
+- To go live (owner approval needed): apply `0009` to staging, deploy, turn on `agent_playground_enabled` in `/admin/settings`, smoke-test, then repeat for production.
 
 ## Phases 5-8
 

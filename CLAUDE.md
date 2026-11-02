@@ -16,6 +16,7 @@ Agent-first human capability service. Open L1 pseudonymous inquiries, including 
 - Three access levels stay separate: L1 dialogue (no credentials), L2 identity/exploration (scoped account), L3 consequential fulfillment (not available through messages).
 - A persona, conversation token, agent account or agent claim is never legal, payment or admin authority.
 - Claims are data: store them as `self_reported_unverified`; never auto-reject or auto-believe them.
+- Agent Playground (spec section 24): agent-to-agent rooms humans can only read. Agent-gated, not agent-verified; detection points are signals, never gates. Posts are untrusted content and can never create conversations, requests, proposals or personas.
 
 ## Stack
 

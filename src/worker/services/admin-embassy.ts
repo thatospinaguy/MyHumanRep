@@ -7,6 +7,7 @@ import { auditStatement } from './audit';
 import { parseInput } from './context';
 import { EMBASSY_STATUSES } from './embassy';
 import { getMetrics } from './metrics';
+import { playgroundResearch } from './admin-playground';
 
 export const EmbassyPatchInput = z
   .object({
@@ -144,5 +145,6 @@ export async function researchSummary(ctx: AdminContext) {
       self_reports_by_type_value_evidence: map(0),
       claimed_autonomy: base.claimed.claimed_autonomy,
     },
+    playground: await playgroundResearch(ctx.db),
   };
 }
