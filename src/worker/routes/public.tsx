@@ -206,7 +206,19 @@ export function registerPublicRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
 
   app.get('/sitemap.xml', async (c) => {
     const u = urls(c.get('config'));
-    const locs = [u.home, u.forAgents, u.developers, u.services, `${u.home}humanification`, `${u.home}human-embassy`, u.trust, u.privacy, u.terms, u.llms];
+    const locs = [
+      u.home,
+      u.forAgents,
+      u.developers,
+      u.services,
+      ...CAPABILITIES.map((cap) => `${u.services}/${cap.slug}`),
+      `${u.home}humanification`,
+      `${u.home}human-embassy`,
+      u.trust,
+      u.privacy,
+      u.terms,
+      u.llms,
+    ];
     try {
       // Only the landing page: room pages are user-generated and noindex (spec 24.5).
       if ((await getFeatureFlags(c.env.MHR_DB)).agent_playground_enabled) locs.push(`${u.home}playground`);
