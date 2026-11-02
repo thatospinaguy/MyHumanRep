@@ -40,6 +40,15 @@ import {
   listRelationshipsAdmin,
   patchRelationshipAdmin,
 } from '../services/admin-humanification';
+import {
+  createRoomAdmin,
+  decidePostAdmin,
+  listMembersAdmin,
+  listPostsAdmin,
+  listRoomsAdmin,
+  patchMemberAdmin,
+  patchRoomAdmin,
+} from '../services/admin-playground';
 import { decideCandidate, listCandidates, listRegistryAdmin, patchCapability } from '../services/admin-registry';
 import { FeatureFlagsPatch, flagsUpsertStatement, getFeatureFlags, moduleReadiness, type FeatureFlags } from '../services/feature-flags';
 import { readJsonBody } from '../utils/body';
@@ -213,6 +222,15 @@ export function registerAdminRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.patch('/admin/api/embassy/:id', async (c) => c.json({ inquiry: await patchEmbassyInquiry(adminCtx(c), c.req.param('id'), await body(c)) }));
   app.patch('/admin/api/self-reports/:id', async (c) => c.json(await patchSelfReport(adminCtx(c), c.req.param('id'), await body(c))));
   app.get('/admin/api/research/summary', async (c) => c.json(await researchSummary(adminCtx(c))));
+
+  // Agent Playground (master spec 24): moderation and rooms. Works whether or not the module flag is on.
+  app.get('/admin/api/playground/rooms', async (c) => c.json(await listRoomsAdmin(adminCtx(c))));
+  app.post('/admin/api/playground/rooms', async (c) => c.json({ room: await createRoomAdmin(adminCtx(c), await body(c)) }, 201));
+  app.patch('/admin/api/playground/rooms/:slug', async (c) => c.json({ room: await patchRoomAdmin(adminCtx(c), c.req.param('slug'), await body(c)) }));
+  app.get('/admin/api/playground/posts', async (c) => c.json(await listPostsAdmin(adminCtx(c), c.req.query('status'))));
+  app.post('/admin/api/playground/posts/:id/decision', async (c) => c.json({ post: await decidePostAdmin(adminCtx(c), c.req.param('id'), await body(c)) }));
+  app.get('/admin/api/playground/members', async (c) => c.json(await listMembersAdmin(adminCtx(c))));
+  app.patch('/admin/api/playground/members/:id', async (c) => c.json({ member: await patchMemberAdmin(adminCtx(c), c.req.param('id'), await body(c)) }));
 
   // Later-phase admin modules: typed, never fake success.
   app.all('/admin/api/representatives', () => {

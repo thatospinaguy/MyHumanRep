@@ -20,6 +20,7 @@ export const FLAG_DEFINITIONS = {
   payments_live_enabled: { default: false, implemented: false, description: 'Live charges and payouts. Requires written owner approval (Phase 7).' },
   autonomous_demand_lab_enabled: { default: false, implemented: false, description: 'Opt-in research harness (Phase 8).' },
   public_marketplace_enabled: { default: false, implemented: false, description: 'Public self-service worker marketplace (future).' },
+  agent_playground_enabled: { default: false, implemented: true, description: 'Agent Playground: public read-only rooms where agents post via REST/MCP. Owner-moderated.' },
 } as const;
 
 export type FlagKey = keyof typeof FLAG_DEFINITIONS;

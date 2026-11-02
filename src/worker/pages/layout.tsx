@@ -7,6 +7,8 @@ export interface PageProps {
   path: string;
   title: string;
   description: string;
+  /** Optional robots directive, e.g. noindex for user-generated pages. */
+  robots?: string;
   children?: Child;
 }
 
@@ -20,7 +22,7 @@ const NAV: Array<[string, string]> = [
   ['/trust', 'Trust'],
 ];
 
-export function Layout({ config, path, title, description, children }: PageProps) {
+export function Layout({ config, path, title, description, robots, children }: PageProps) {
   const canonical = `${config.baseUrl}${path === '/' ? '/' : path}`;
   return (
     <html lang="en">
@@ -29,6 +31,7 @@ export function Layout({ config, path, title, description, children }: PageProps
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
         <meta name="description" content={description} />
+        {robots ? <meta name="robots" content={robots} /> : null}
         <link rel="canonical" href={canonical} />
         <link rel="stylesheet" href="/assets/site.css" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

@@ -19,12 +19,16 @@ const registrySeed = env.TEST_MIGRATIONS.filter((m) => m.name.startsWith('0004')
   .flatMap((m) => m.queries)
   .map((q) => q.replace(/^\s*--.*$/gm, '').trim())
   .filter((q) => /^INSERT INTO capabilit/.test(q));
+const roomSeed = env.TEST_MIGRATIONS.filter((m) => m.name.startsWith('0009'))
+  .flatMap((m) => m.queries)
+  .map((q) => q.replace(/^\s*--.*$/gm, '').trim())
+  .filter((q) => /^INSERT OR IGNORE INTO playground_(rooms|counters)/.test(q));
 
 // Every test starts from an empty database (storage is shared within a test file), with the
 // capability registry restored to its seeded state.
 beforeEach(async () => {
   await env.MHR_DB.batch(
-    ['agent_human_relationships', 'project_conversations', 'projects', 'proposal_events', 'proposal_revisions', 'proposals', 'embassy_inquiries', 'persona_inquiries', 'persona_grants', 'persona_revisions', 'agent_personas', 'conversation_account_links', 'agent_accounts', 'candidate_capabilities', 'agent_self_reports', 'notification_outbox', 'capability_requests', 'messages', 'conversations', 'admin_audit', 'abuse_events', 'rate_limit_counters', 'settings'].map(
+    ['playground_counters', 'playground_signals', 'playground_mentions', 'playground_posts', 'playground_members', 'playground_rooms', 'agent_human_relationships', 'project_conversations', 'projects', 'proposal_events', 'proposal_revisions', 'proposals', 'embassy_inquiries', 'persona_inquiries', 'persona_grants', 'persona_revisions', 'agent_personas', 'conversation_account_links', 'agent_accounts', 'candidate_capabilities', 'agent_self_reports', 'notification_outbox', 'capability_requests', 'messages', 'conversations', 'admin_audit', 'abuse_events', 'rate_limit_counters', 'settings'].map(
       (t) => env.MHR_DB.prepare(`DELETE FROM ${t}`),
     ),
   );
@@ -32,5 +36,6 @@ beforeEach(async () => {
     env.MHR_DB.prepare('DELETE FROM capability_aliases'),
     env.MHR_DB.prepare('DELETE FROM capabilities'),
     ...registrySeed.map((q) => env.MHR_DB.prepare(q)),
+    ...roomSeed.map((q) => env.MHR_DB.prepare(q)),
   ]);
 });
